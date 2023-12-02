@@ -1,0 +1,10 @@
+#物流的微服务
+server:
+  port: 8830
+  servlet:
+    context-path: /redis
+spring:
+  application:
+    name: redis-server
+  profiles:
+    active: dev

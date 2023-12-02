@@ -1,0 +1,10 @@
+#物流的微服务
+server:
+  port: 8830
+  servlet:
+    context-path: /mongodb
+spring:
+  application:
+    name: mongodb-server
+  profiles:
+    active: dev
