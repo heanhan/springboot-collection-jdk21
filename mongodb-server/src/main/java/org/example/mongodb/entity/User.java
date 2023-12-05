@@ -1,16 +1,25 @@
 package org.example.mongodb.entity;
 
 import lombok.Data;
+import lombok.experimental.Accessors;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
 @Data
+@Document(collection="t_user")
+@Accessors(chain = true)
 public class User implements Serializable {
     /**
      * id
      */
+    /**
+     * 使用 @MongoID 能更清晰的指定 _id 主键
+     */
+    @MongoId
     private Long id;
 
     /**
