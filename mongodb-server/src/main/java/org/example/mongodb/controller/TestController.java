@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Slf4j
 @RestController
 @RequestMapping(value = "/test")
@@ -22,6 +25,7 @@ public class TestController {
 
     @PostMapping(value = "/createCollection")
     public ResultBody createCollection(){
+        Map<String,String> map=new HashMap<>();
 
         return ResultBody.success();
     }
