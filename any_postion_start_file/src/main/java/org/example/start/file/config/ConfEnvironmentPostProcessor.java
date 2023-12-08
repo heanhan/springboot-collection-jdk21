@@ -79,7 +79,7 @@ public class ConfEnvironmentPostProcessor implements EnvironmentPostProcessor {
                 Properties defaultProperties = loadProperties(defaultFile);
                 propertySources.addFirst(new PropertiesPropertySource(StringUtils.join(FILE_PREFIX, FILE_SUFFIX), defaultProperties));
                 System.out.println("加载配置文件："+ StringUtils.join(FILE_PREFIX, FILE_SUFFIX));
-                if(io.micrometer.common.util.StringUtils.isNotEmpty(defaultProperties.getProperty(PROFILES_INCLUDE_FILE))){
+                if(StringUtils.isNotEmpty(defaultProperties.getProperty(PROFILES_INCLUDE_FILE))){
                     properties = defaultProperties;
                 }
             }
