@@ -15,7 +15,7 @@
         <module>commons-server</module>
         <module>redis-lettuce</module>
         <module>mongodb-server</module>
-        <module>any_postion_start_file</module>
+        <module>any_position_start_file</module>
     </modules>
 
     <properties>
