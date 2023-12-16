@@ -16,6 +16,9 @@
         <module>redis-lettuce</module>
         <module>mongodb-server</module>
         <module>any_position_start_file</module>
+        <module>validates</module>
+        <module>global-excepion-starter</module>
+        <module>elasticsearch-server</module>
     </modules>
 
     <properties>

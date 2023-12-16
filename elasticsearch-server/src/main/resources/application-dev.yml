@@ -1,0 +1,16 @@
+# elasticsearch的使用
+server:
+  port: 9501
+  servlet:
+    context-path: /elastic
+spring:
+  elasticsearch:
+    uris: http://172.16.75.116:9200
+    username: elastic
+    password: abcd@123456
+    #连接超时 10秒  默认1秒
+    connection-timeout: 10
+  data:
+    elasticsearch:
+      repositories:
+        enabled: true
