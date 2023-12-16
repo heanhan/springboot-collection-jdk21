@@ -1,0 +1,10 @@
+#参数校验模块的配置文件
+server:
+  port: 9310
+  servlet:
+    context-path: /validate
+spring:
+  application:
+    name: springboot-validate
+  profiles:
+    active: dev
