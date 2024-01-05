@@ -57,6 +57,8 @@ public class User implements Serializable {
      */
     private boolean sex;
 
+    private Integer ss;
+
     /**
      * 个人介绍  座右铭之类
      */
