@@ -19,6 +19,9 @@
         <module>validates</module>
         <module>global-excepion-starter</module>
         <module>elasticsearch-server</module>
+        <module>minio-server</module>
+        <module>dynamic-datasource-jpa</module>
+        <module>dynamic-datasource-mybatis</module>
     </modules>
 
     <properties>
