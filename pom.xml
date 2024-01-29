@@ -22,6 +22,7 @@
         <module>minio-server</module>
         <module>dynamic-datasource-jpa</module>
         <module>dynamic-datasource-mybatis</module>
+        <module>springboot-rocketmq</module>
     </modules>
 
     <properties>
