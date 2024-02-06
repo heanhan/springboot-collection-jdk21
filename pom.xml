@@ -23,6 +23,7 @@
         <module>dynamic-datasource-jpa</module>
         <module>dynamic-datasource-mybatis</module>
         <module>springboot-rocketmq</module>
+        <module>springboot-jpa</module>
     </modules>
 
     <properties>

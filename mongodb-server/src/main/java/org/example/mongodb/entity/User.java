@@ -2,76 +2,47 @@ package org.example.mongodb.entity;
 
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
-import java.util.List;
 
 @Data
-@Document(collection="t_user")
+@Document(collection="users")
 @Accessors(chain = true)
 public class User implements Serializable {
-    /**
-     * id
-     */
-    /**
-     * 使用 @MongoID 能更清晰的指定 _id 主键
-     */
-    @MongoId
-    private Long id;
 
-    /**
-     * 用户名  账号
-     */
+    @Id
+    private String id;
+
+    //用户名
     private String userName;
 
-    /**
-     * 密码
-     */
-    private String password;
+    //国籍
+    private String country;
 
-    /**
-     * 别名
-     */
-    private String nickName;
+    private Date birthday;
+    //邮编
+    private Address address;
 
-    /**
-     * 实名
-     */
-    private String realName;
+    //爱好
+    private Favorites favorites;
 
-    /**
-     * 身份证号
-     */
-    private String idCardNo;
+    //年龄
+    private Integer age;
 
-    /**
-     * 爱好
-     */
-    private List<String> hobby;
+    //薪水
+    private BigDecimal salary;
 
-    /**
-     * 性别
-     */
-    private boolean sex;
+    //存款
+    private BigDecimal money;
 
-    private Integer ss;
+    //身高 单位：m
+    private String length;
 
-    /**
-     * 个人介绍  座右铭之类
-     */
-    private String descriptions;
 
-    private Date createTime;
-
-    private Data updateTime;
-
-    /**
-     * 数据是否有效，ture,有效; false 是无效
-     */
-    private Boolean deleted;
 
 
 }

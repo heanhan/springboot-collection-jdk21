@@ -2,8 +2,8 @@ package org.example.mongodb.entity;
 
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.MongoId;
 
 import java.io.Serializable;
 
@@ -13,7 +13,7 @@ import java.io.Serializable;
 @Accessors(chain = true)
 public class Books implements Serializable {
 
-    @MongoId
+    @Id
     private String id;
 
     private String author;
