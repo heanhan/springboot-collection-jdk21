@@ -1,11 +1,11 @@
 spring:
   data:
     mongodb:
-      host: 172.16.75.111
+      host: 172.16.75.117
       port: 27017
-      authentication-database: test
-      database: test
-      username: test
-      password: abcd@123456
+      authentication-database: mongo-test
+      database: mongo-test
+      username: mongo-test
+      password: "123456"
       #自动创建索引  2.X的mogodb是默认开启，3.X只有默关闭 即使用@Index 在属性上不生效
       auto-index-creation: false

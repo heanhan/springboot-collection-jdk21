@@ -1,0 +1,7 @@
+server:
+  port: 8888
+  servlet:
+    context-path: /jpa
+spring:
+  application:
+    name: springboot-jpa
