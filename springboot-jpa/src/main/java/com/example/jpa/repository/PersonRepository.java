@@ -1,6 +1,10 @@
 package com.example.jpa.repository;
 
+import com.example.jpa.dto.PersonDto;
 import com.example.jpa.entity.Person;
+import com.example.jpa.vo.PersonSelectParam;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -21,7 +25,7 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
      * @param userName 用户名 支持模糊查询
      * @param height 身高 大于传参
 //     * @param lastModifiedTime  当前时间
-     * @return
+     * @return List<Person>
      */
     @Query(value = "select p.id, p.user_name, p.sex, p.height, p.hover, p.self_info, p.creator_id,p.last_modifier_id, p.last_modified_time,p.created_time,p.is_deleted,p.password from t_person p " +
             " where p.is_deleted=false " +
@@ -45,4 +49,13 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
             " if(:#{#person.userName} !='',p.user_name=:#{#person.userName},1=1) ",nativeQuery = true)
     List<Person> findPersonByCondition1(@Param(value = "person") Person person);
 
+    @Query(value = "select p.* from t_person p  where p.is_deleted=false" +
+            " and   if(:#{#param.userName} !='',p.user_name like concat(\"%\",:#{#param.getUserName()},\"%\"),1=1) " +
+            " order by p.last_modified_time "
+            ,nativeQuery = true)
+    Page<Person> findPersonPageBySql(@Param("param") PersonSelectParam param, Pageable pageable);
+
+
+    @Query(value="select p from Person as p ",nativeQuery = false)
+    List<PersonDto> findPersonByCondition();
 }
