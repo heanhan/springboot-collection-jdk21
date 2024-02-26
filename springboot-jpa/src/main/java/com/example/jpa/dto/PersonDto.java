@@ -1,4 +1,4 @@
-package com.example.jpa.vo;
+package com.example.jpa.dto;
 
 import com.example.jpa.config.JpaConverterListJson;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -9,9 +9,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 import java.time.LocalDateTime;
 import java.util.List;
 
-
 @Data
-public class PersonSelectParam {
+public class PersonDto {
+
 
     /**
      * ID，唯一标识列，使用主键自增策略
@@ -70,13 +70,4 @@ public class PersonSelectParam {
      */
     private Boolean isDeleted;
 
-    /**
-     * 当前页  默认为 0 【第一页】
-     */
-    private Integer indexSize=0;
-
-    /**
-     * 每页大小 默认每页大小为10
-     */
-    private Integer pageSize=10;
 }

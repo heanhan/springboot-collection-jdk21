@@ -1,11 +1,15 @@
 package com.example.jpa.controller;
 
 
+import com.example.jpa.dto.PersonDto;
 import com.example.jpa.entity.Person;
 import com.example.jpa.service.PersonService;
+import com.example.jpa.vo.PersonSelectParam;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.example.commons.enums.CommonEnum;
 import org.example.commons.result.ResultBody;
+import org.springframework.data.domain.Page;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +18,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 
 @Slf4j
@@ -68,5 +74,51 @@ public class PersonController {
     @PostMapping(value = "/findPersonByCondition1")
     public ResultBody findPersonByCondition1(@RequestBody Person person){
         return personService.findPersonByCondition1(person);
+    }
+
+    /**
+     * 分页查询 （使用jpa的接口方法）
+     * @param param
+     * @return
+     */
+    @PostMapping(value = "/findPersonPageByCondition")
+    public ResultBody findPersonPageByCondition(@RequestBody PersonSelectParam param){
+        Page<Person> page = null;
+        try {
+            page = personService.findPersonPageByCondition(param);
+        } catch (Exception e) {
+            log.info("分页查询-->捕获的异常信息：{}",e.getMessage());
+            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+        }
+        return ResultBody.success(page);
+    }
+
+    /**
+     * 分页查询 （使用原生的sql）
+     * @param param
+     * @return
+     */
+    @PostMapping(value = "/findPersonPageBySql")
+    public ResultBody findPersonPageBySql(@RequestBody PersonSelectParam param){
+        Page<Person> page = null;
+        try {
+            page = personService.findPersonPageBySql(param);
+        } catch (Exception e) {
+            log.info("分页查询(原生sql)-->捕获的异常信息：{}",e.getMessage());
+            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+        }
+        return ResultBody.success(page);
+    }
+
+    @PostMapping(value = "/findPersonByCondition")
+    public ResultBody findPersonByCondition(@RequestBody PersonSelectParam param){
+        List<PersonDto> list = null;
+        try {
+            list = personService.findPersonByCondition(param);
+        } catch (Exception e) {
+            log.info("报错信息：{}",e.getMessage());
+            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+        }
+        return ResultBody.success(list);
     }
 }

@@ -1,7 +1,12 @@
 package com.example.jpa.service;
 
+import com.example.jpa.dto.PersonDto;
 import com.example.jpa.entity.Person;
+import com.example.jpa.vo.PersonSelectParam;
 import org.example.commons.result.ResultBody;
+import org.springframework.data.domain.Page;
+
+import java.util.List;
 
 public interface PersonService {
 
@@ -31,4 +36,26 @@ public interface PersonService {
      * @return
      */
     ResultBody findPersonByCondition1(Person person);
+
+    /**
+     * 多条件的分页查询
+     * @param param
+     * @return  Page<Person>
+     */
+    Page<Person> findPersonPageByCondition(PersonSelectParam param);
+
+
+    /**
+     * 多条件的分页查询  使用原生的sql
+     * @param param
+     * @return  Page<Person>
+     */
+    Page<Person> findPersonPageBySql(PersonSelectParam param);
+
+    /**
+     * 条件查询  返回自定义的vo
+     * @param param
+     * @return
+     */
+    List<PersonDto> findPersonByCondition(PersonSelectParam param);
 }
