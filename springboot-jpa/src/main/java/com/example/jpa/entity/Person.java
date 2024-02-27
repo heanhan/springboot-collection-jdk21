@@ -4,6 +4,7 @@ import com.example.jpa.config.JpaConverterListJson;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -14,7 +15,8 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.util.List;
 
 @Data
-@Entity(name = "t_person")
+@Entity
+@Table(name = "t_person")
 @DynamicInsert
 @DynamicUpdate
 @EqualsAndHashCode(callSuper = true)

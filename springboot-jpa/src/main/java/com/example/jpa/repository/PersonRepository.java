@@ -1,6 +1,7 @@
 package com.example.jpa.repository;
 
 import com.example.jpa.dto.PersonDto;
+import com.example.jpa.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
 import com.example.jpa.vo.PersonSelectParam;
 import org.springframework.data.domain.Page;
@@ -11,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -56,6 +58,30 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
     Page<Person> findPersonPageBySql(@Param("param") PersonSelectParam param, Pageable pageable);
 
 
-    @Query(value="select p from Person as p ",nativeQuery = false)
-    List<PersonDto> findPersonByCondition();
+    @Query(value="select new com.example.jpa.dto.PersonDto(p.id,p.userName, p.sex, p.height, p.lastModifiedTime, p.lastModifierId, p.isDeleted) from Person as p" +
+            " where p.isDeleted=false" +
+            " AND (:#{#param.getUserName()} is null or p.userName LIKE %:#{#param.getUserName()}%) "
+            ,nativeQuery = false)
+    List<PersonDto> findPersonByCondition(@Param("param") PersonSelectParam param);
+
+
+    /**
+     * 查询用户的工作经历
+     * @param personId  用户id
+     * @param userName 用户名
+     * @param worker  工作
+     * @param beginWorkTime 工作开始时间
+     * @return
+     */
+    @Query(value = "select new com.example.jpa.dto.PersonWorkDto(p.id, p.userName, p.sex, p.selfInfo, w.id, w.workName, w.workLevel, w.workContent) " +
+            " from Person p , WorkInfo  w " +
+            " where p.id=w.personId" +
+            " and p.isDeleted =false  " +
+            " and w.isDeleted=false " +
+            " and ( ?1 is null or p.id=?1 ) " +
+            " and ( ?2 is null or p.userName like %?2%)" +
+            " and ( ?3 is null or w.workName like %?3%)" +
+            " and ( ?4 is null or w.firstWorkTime >= ?4)"
+    )
+    List<PersonWorkDto> findPersonExtraInfo(Long personId, String userName, String worker, LocalDateTime beginWorkTime);
 }

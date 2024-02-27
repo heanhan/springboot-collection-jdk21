@@ -1,7 +1,7 @@
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/springboot-jpa?characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://172.16.75.105:3306/springboot-jpa?characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: abcd@123456
     # druid 连接池管理
