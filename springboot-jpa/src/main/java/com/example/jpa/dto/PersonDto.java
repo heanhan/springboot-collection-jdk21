@@ -1,13 +1,10 @@
 package com.example.jpa.dto;
 
-import com.example.jpa.config.JpaConverterListJson;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import jakarta.persistence.Convert;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 public class PersonDto {
@@ -37,8 +34,7 @@ public class PersonDto {
     /**
      * 爱好
      */
-    @Convert(converter = JpaConverterListJson.class)
-    private List<String> hover;
+    private String hover;
 
     /**
      * 创建时间
@@ -70,4 +66,13 @@ public class PersonDto {
      */
     private Boolean isDeleted;
 
+    public PersonDto(Long id, String userName, Boolean sex, Double height, LocalDateTime lastModifiedTime, Long lastModifierId, Boolean isDeleted) {
+        this.id = id;
+        this.userName = userName;
+        this.sex = sex;
+        this.height = height;
+        this.lastModifiedTime = lastModifiedTime;
+        this.lastModifierId = lastModifierId;
+        this.isDeleted = isDeleted;
+    }
 }

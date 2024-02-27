@@ -1,9 +1,11 @@
 package com.example.jpa.service.impl;
 
 import com.example.jpa.dto.PersonDto;
+import com.example.jpa.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
 import com.example.jpa.repository.PersonRepository;
 import com.example.jpa.service.PersonService;
+import com.example.jpa.vo.PersonExtraVo;
 import com.example.jpa.vo.PersonSelectParam;
 import jakarta.annotation.Resource;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -11,6 +13,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commons.result.ResultBody;
 import org.springframework.data.domain.Page;
@@ -39,6 +42,7 @@ public class PersonServiceImpl implements PersonService {
      * @return Person 用户明细  敏感数据进行脱敏
      */
     @Override
+    @Transactional
     public Person findPersonById(Long id) {
         Optional<Person> personOptional = personRepository.findById(id);
         if(personOptional.isPresent()){
@@ -172,7 +176,41 @@ public class PersonServiceImpl implements PersonService {
      */
     @Override
     public List<PersonDto> findPersonByCondition(PersonSelectParam param) {
-        List<PersonDto> list=personRepository.findPersonByCondition();
+        List<PersonDto> list=personRepository.findPersonByCondition(param);
         return list;
     }
+
+    /**
+     * 更新 数据
+     *
+     * @param person
+     * @return
+     */
+    @Transactional
+    @Override
+    public Person updatePerson(Person person) {
+        Person save = personRepository.save(person);
+        return save;
+    }
+
+    /**
+     * 删除根据id
+     *
+     * @param id
+     */
+    @Transactional
+    @Override
+    public void deletePerson(Long id) {
+        personRepository.deleteById(id);
+    }
+
+    /**
+     * 连表查询
+     */
+    @Override
+    public List<PersonWorkDto> findPersonExtraInfo(PersonExtraVo vo) {
+        List<PersonWorkDto> list=personRepository.findPersonExtraInfo(vo.getPersonId(),vo.getUserName(),vo.getWorker(),vo.getBeginWorkTime());
+        return list;
+    }
+
 }

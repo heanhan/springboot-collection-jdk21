@@ -1,7 +1,9 @@
 package com.example.jpa.service;
 
 import com.example.jpa.dto.PersonDto;
+import com.example.jpa.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
+import com.example.jpa.vo.PersonExtraVo;
 import com.example.jpa.vo.PersonSelectParam;
 import org.example.commons.result.ResultBody;
 import org.springframework.data.domain.Page;
@@ -58,4 +60,23 @@ public interface PersonService {
      * @return
      */
     List<PersonDto> findPersonByCondition(PersonSelectParam param);
+
+
+    /**
+     * 更新 数据
+     * @param person
+     * @return
+     */
+    Person updatePerson(Person person);
+
+    /**
+     * 删除根据id
+     * @param id
+     */
+    void deletePerson(Long id);
+
+    /**
+     * 连表查询
+     */
+    List<PersonWorkDto> findPersonExtraInfo(PersonExtraVo personExtraVo);
 }
