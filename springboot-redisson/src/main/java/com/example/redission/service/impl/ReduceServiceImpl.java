@@ -32,7 +32,8 @@ public class ReduceServiceImpl implements ReduceService {
         //1、先获取库存
         Storage storage=storageService.findStorageById(produceId);
         //如果库存为0  则表明抢购结束
-        if(storage.getNumber()<0){
+        if(storage.getNumber()<=0){
+            log.info("很抱歉，抢购失败，请再次抢购,用户为:{}",userId);
             return ResultBody.success("很抱歉，抢购失败，请再次抢购");
         }
         //2、创建订单
@@ -42,9 +43,11 @@ public class ReduceServiceImpl implements ReduceService {
         orderService.addOrderInfo(order);
         //3、减库存
         Integer flag=storageService.reduceStorageNumber(produceId);
-        if(flag<0){
+        if(flag<=0){
+            log.info("扣减库存异常，到时抢购失败，用户为:{}",userId);
             ResultBody.error("扣减库存异常，到时抢购失败");
         }
-        return ResultBody.success("请购成功");
+        log.info("抢购成功：{}",userId);
+        return ResultBody.success("抢购成功");
     }
 }

@@ -31,7 +31,7 @@ public class RedissionController {
     public ResultBody reduceStockByRedisson(@RequestBody ReduceRequestVo vo){
         Random random = new Random();
         // 生成1到20之间（包括1但不包括20）的随机整数
-        int randomNum = random.nextInt(20);
+        int randomNum = random.nextInt(100);
         vo.setUserId(randomNum);
         String lockKey = "lockKey";
         //1.获取锁对象
