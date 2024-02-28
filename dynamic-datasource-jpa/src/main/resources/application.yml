@@ -1,0 +1,9 @@
+server:
+  port: 8200
+  servlet:
+    context-path: /dynamic/jpa
+spring:
+  application:
+    name: dynamic-datasource-jpa
+  profiles:
+    active: dev

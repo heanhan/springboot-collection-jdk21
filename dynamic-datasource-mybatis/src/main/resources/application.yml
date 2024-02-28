@@ -1,0 +1,9 @@
+server:
+  port: 8210
+  servlet:
+    context-path: /dynamic/mybatis
+spring:
+  application:
+    name: dynamic-datasource-mybatis
+  profiles:
+    active: dev
