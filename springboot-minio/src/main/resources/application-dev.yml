@@ -1,0 +1,13 @@
+server:
+  port: 8990
+# DataSource Config
+#minio配置
+minio:
+  #对象存储服务的URL
+  url: http://172.16.75.105:9000
+  #Access key账户
+  accessKey: root
+  #Secret key密码
+  secretKey: 12345678
+  #默认的桶
+  bucketName: default-buckets
