@@ -6,6 +6,7 @@ import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.ListBucketsArgs;
 import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
@@ -19,10 +20,13 @@ import io.minio.messages.Bucket;
 import io.minio.messages.Item;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class MinioUtil {
@@ -74,6 +78,7 @@ public class MinioUtil {
                 Item item = r.get();
                 info.setFilename(item.objectName());
                 info.setDirectory(item.isDir());
+                info.setSize(formatFileSize(item.size()));
                 infos.add(info);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -81,6 +86,9 @@ public class MinioUtil {
         });
         return infos;
     }
+
+
+
 
     /**
      * 下载一个文件
@@ -166,5 +174,54 @@ public class MinioUtil {
 
         return FileInfos;
     }
+
+    /**
+     * 只列出桶下的文件夹
+     * @param bucketName  桶名称 可以为空
+     * @return
+     */
+    public List<String> folderList(String bucketName) throws Exception {
+        List<String> folders = new ArrayList<>();
+        if(StringUtils.hasText(bucketName)){
+            //取指定桶下的文件夹
+            // 使用ListObjects方法列出指定前缀下的所有对象
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder().bucket(bucketName).recursive(true).build());
+            for (Result<Item> result : results){
+                // 获取对象的名称
+                String objectName = result.get().objectName();
+                // 判断是否为文件夹
+                if (objectName.endsWith("/")) {
+                    // 提取文件夹名称并添加到列表中
+                }
+            }
+
+        }else{
+            List<String> strings = listBuckets();
+        }
+
+    }
+
+
+
+    private  String formatFileSize(long fileS) {
+        DecimalFormat df = new DecimalFormat("#.00");
+        String fileSizeString = "";
+        String wrongSize = "0B";
+        if (fileS == 0) {
+            return wrongSize;
+        }
+        if (fileS < 1024) {
+            fileSizeString = df.format((double) fileS) + " B";
+        } else if (fileS < 1048576) {
+            fileSizeString = df.format((double) fileS / 1024) + " KB";
+        } else if (fileS < 1073741824) {
+            fileSizeString = df.format((double) fileS / 1048576) + " MB";
+        } else {
+            fileSizeString = df.format((double) fileS / 1073741824) + " GB";
+        }
+        return fileSizeString;
+    }
+
 
 }
