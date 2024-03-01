@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @RestController
@@ -71,6 +72,14 @@ public class FileController {
     public ResultBody listFiles(@RequestParam(value = "bucket") String bucket) throws Exception {
         List<FileInfo> fileInfos = minioUtil.listFiles(bucket);
         return ResultBody.success(fileInfos);
+    }
+
+    @GetMapping(value = "/folderList")
+    public ResultBody folderList(String bucketName) throws Exception {
+
+        List<Objects> list=minioUtil.folderList(bucketName);
+        return ResultBody.success(list);
+
     }
 
     /**
@@ -180,6 +189,8 @@ public class FileController {
         List<FileInfo> fileInfos = minioUtil.listAllFile();
         return ResultBody.success(fileInfos);
     }
+
+
 
 
 }
