@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 @Slf4j
@@ -52,6 +54,12 @@ public class RedissionController {
             log.info("<=业务代码执行完毕，释放当前锁！");
         }
 
+    }
+
+    @PostMapping(value = "/countAccount")
+    public ResultBody countAccount(){
+        Map<String,String> map=new HashMap<>();
+        return ResultBody.success();
     }
 
 

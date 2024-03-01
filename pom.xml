@@ -24,6 +24,8 @@
         <module>springboot-rocketmq</module>
         <module>springboot-jpa</module>
         <module>springboot-redisson</module>
+        <module>springboot-limit-interface</module>
+        <module>springboot-minio</module>
     </modules>
 
     <properties>
