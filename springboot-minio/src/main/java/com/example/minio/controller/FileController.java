@@ -17,7 +17,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 @RestController
@@ -77,7 +76,7 @@ public class FileController {
     @GetMapping(value = "/folderList")
     public ResultBody folderList(String bucketName) throws Exception {
 
-        List<Objects> list=minioUtil.folderList(bucketName);
+        List<String> list=minioUtil.folderList(bucketName);
         return ResultBody.success(list);
 
     }
