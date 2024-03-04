@@ -6,7 +6,6 @@ import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
-import io.minio.ListBucketsArgs;
 import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
@@ -26,7 +25,6 @@ import java.io.InputStream;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Component
 public class MinioUtil {
@@ -199,7 +197,7 @@ public class MinioUtil {
         }else{
             List<String> strings = listBuckets();
         }
-
+        return folders;
     }
 
 
