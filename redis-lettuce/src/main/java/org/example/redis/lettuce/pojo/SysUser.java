@@ -3,7 +3,6 @@ package org.example.redis.lettuce.pojo;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Lob;
-import jakarta.persistence.Transient;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.hibernate.annotations.DynamicInsert;
@@ -40,10 +39,6 @@ public class SysUser extends BaseEntity {
      * 所属部门ID
      */
     private Long departmentId;
-    /**
-     * 所属部门
-     */
-    @Transient
-    private Department department;
+
 }
 

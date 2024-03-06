@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: springboot-test
+  main:
+    allow-circular-references: true
+#movie:
+#  site:
+#    name: 百度三下
+#    url: http://www.baidu.com

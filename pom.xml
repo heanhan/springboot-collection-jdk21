@@ -25,6 +25,10 @@
         <module>springboot-redisson</module>
         <module>springboot-limit-interface</module>
         <module>springboot-minio</module>
+        <module>springboot-common-starter</module>
+        <module>springboot-common-starter/springboot-common</module>
+        <module>springboot-common-starter/springboot-starter-web</module>
+        <module>Springboo-test</module>
     </modules>
 
     <properties>
