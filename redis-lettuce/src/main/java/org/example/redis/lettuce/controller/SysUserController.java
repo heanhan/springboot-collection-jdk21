@@ -6,6 +6,7 @@ import org.example.commons.enums.CommonEnum;
 import org.example.commons.result.ResultBody;
 import org.example.redis.lettuce.pojo.SysUser;
 import org.example.redis.lettuce.service.SysUserService;
+import org.example.redis.lettuce.utils.RedisUtil;
 import org.example.redis.lettuce.vo.SysUserVo;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,14 +22,24 @@ import java.util.List;
 public class SysUserController {
 
     @Resource
+    private RedisUtil redisUtil;
+
+    @Resource
     private SysUserService sysUserService;
 
     @PostMapping(value = "/addSysUser")
     public ResultBody addSysUser(@RequestBody SysUser sysUser){
-        SysUser result= sysUserService.addSysUser(sysUser);
+        SysUser result= null;
+        try {
+            result = sysUserService.addSysUser(sysUser);
+        } catch (Exception e) {
+            log.info("添加用户接口失败，失败原因：{}",e.getMessage());
+            return ResultBody.error("添加失败");
+        }
         if(ObjectUtils.isEmpty(result)){
             return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
         }
+        redisUtil.set(result.getId().toString(),result);
         return ResultBody.success(CommonEnum.SUCCESS);
 
     }
