@@ -16,7 +16,7 @@
         <module>mongodb-server</module>
         <module>any_position_start_file</module>
         <module>validates</module>
-        <module>global-excepion-starter</module>
+        <module>global-exception-starter</module>
         <module>elasticsearch-server</module>
         <module>dynamic-datasource-jpa</module>
         <module>dynamic-datasource-mybatis</module>
@@ -28,7 +28,7 @@
         <module>springboot-common-starter</module>
         <module>springboot-common-starter/springboot-common</module>
         <module>springboot-common-starter/springboot-starter-web</module>
-        <module>Springboo-test</module>
+        <module>Springboot-test</module>
     </modules>
 
     <properties>
