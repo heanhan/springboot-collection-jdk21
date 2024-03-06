@@ -13,6 +13,11 @@
 
     <name>springboot-common-starter</name>
 
+    <modules>
+        <module>springboot-common</module>
+        <module>springboot-starter-web</module>
+    </modules>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>

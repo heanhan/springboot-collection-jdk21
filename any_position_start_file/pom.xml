@@ -9,7 +9,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>any_postion_start_file</artifactId>
+    <artifactId>any_position_start_file</artifactId>
 
     <packaging>war</packaging>
 
