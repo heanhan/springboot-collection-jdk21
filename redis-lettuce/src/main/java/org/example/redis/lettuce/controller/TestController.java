@@ -1,8 +1,8 @@
 package org.example.redis.lettuce.controller;
 
 
+import com.example.common.result.ResultBody;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;

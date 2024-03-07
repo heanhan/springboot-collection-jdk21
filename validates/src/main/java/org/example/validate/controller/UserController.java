@@ -1,7 +1,7 @@
 package org.example.validate.controller;
 
+import com.example.common.result.ResultBody;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.example.validate.pojo.vo.UserVo;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;

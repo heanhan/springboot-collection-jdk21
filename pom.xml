@@ -11,7 +11,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>commons-server</module>
+        <module>springboot-common-starter/springboot-starter-web</module>
         <module>redis-lettuce</module>
         <module>mongodb-server</module>
         <module>any_position_start_file</module>
@@ -26,8 +26,6 @@
         <module>springboot-limit-interface</module>
         <module>springboot-minio</module>
         <module>springboot-common-starter</module>
-        <module>springboot-common-starter/springboot-common</module>
-        <module>springboot-common-starter/springboot-starter-web</module>
         <module>Springboot-test</module>
     </modules>
 

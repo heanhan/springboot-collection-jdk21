@@ -1,5 +1,6 @@
 package com.example.dynamic.jpa.tenant.controller;
 
+import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.system.config.DynamicDataSource;
 import com.example.dynamic.jpa.system.config.DynamicDatabaseProperties;
 import com.example.dynamic.jpa.system.config.LoginInfoHolder;
@@ -9,7 +10,6 @@ import com.example.dynamic.jpa.system.vo.LoginInfo;
 import com.example.dynamic.jpa.tenant.entity.Test;
 import com.example.dynamic.jpa.tenant.service.TestService;
 import jakarta.annotation.Resource;
-import org.example.commons.result.ResultBody;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;

@@ -1,12 +1,12 @@
 package org.example.mongodb.globalException;
 
+import com.example.common.enums.CommonEnum;
+import com.example.common.exceptins.BizException;
+import com.example.common.result.ResultBody;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.enums.CommonEnum;
-import org.example.commons.exceptins.BizException;
-import org.example.commons.result.ResultBody;
 import org.springframework.beans.NotReadablePropertyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindingResult;

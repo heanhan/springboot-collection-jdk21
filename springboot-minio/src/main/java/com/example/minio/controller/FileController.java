@@ -1,12 +1,12 @@
 package com.example.minio.controller;
 
+import com.example.common.result.ResultBody;
 import com.example.minio.dto.FileInfo;
 import com.example.minio.utils.MinioUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

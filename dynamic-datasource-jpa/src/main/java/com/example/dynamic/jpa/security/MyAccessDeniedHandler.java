@@ -1,10 +1,10 @@
 package com.example.dynamic.jpa.security;
 
+import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.common.util.JSONUtils;
 import com.example.dynamic.jpa.exception.ExceptionCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.commons.result.ResultBody;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;

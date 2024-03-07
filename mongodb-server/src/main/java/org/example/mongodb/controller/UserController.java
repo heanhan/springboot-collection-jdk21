@@ -1,8 +1,8 @@
 package org.example.mongodb.controller;
 
+import com.example.common.result.ResultBody;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.example.mongodb.entity.User;
 import org.example.mongodb.service.UserService;
 import org.example.mongodb.vo.UserVo;

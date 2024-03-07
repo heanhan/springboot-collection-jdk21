@@ -1,10 +1,10 @@
 package com.example.dynamic.jpa.security;
 
+import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.common.util.JSONUtils;
 import com.example.dynamic.jpa.exception.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.commons.result.ResultBody;
 import org.springframework.security.authentication.AccountExpiredException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.CredentialsExpiredException;
