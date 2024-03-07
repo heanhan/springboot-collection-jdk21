@@ -1,26 +1,16 @@
 package com.example.web;
 
-import com.example.web.config.MovieSiteProperties;
-import com.example.web.config.MovieSiteTemplate;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import com.example.web.config.ResponseBodyHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(MovieSiteProperties.class)
 public class ExpandWebStarterAutoConfiguration {
 
-    private MovieSiteProperties movieSiteProperties;
-
-    public ExpandWebStarterAutoConfiguration(MovieSiteProperties movieSiteProperties) {
-        this.movieSiteProperties = movieSiteProperties;
+    @Bean //将ResponseBodyHandler注入spring容器中
+    public ResponseBodyHandler responseBodyHandler(){
+        return  new ResponseBodyHandler();
     }
 
-    @Bean
-    @ConditionalOnMissingBean(MovieSiteTemplate.class)
-    public MovieSiteTemplate movieSiteTemplate(){
-        return new MovieSiteTemplate(movieSiteProperties);
-    }
 }
 

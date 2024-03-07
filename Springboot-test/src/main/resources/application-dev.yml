@@ -3,7 +3,27 @@ spring:
     name: springboot-test
   main:
     allow-circular-references: true
-#movie:
-#  site:
-#    name: 百度三下
-#    url: http://www.baidu.com
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.example.test.Controller
+# knife4j的增强配置，不需要增强可以不配
+knife4j:
+  #开启增强模式
+  enable: true
+  #开启生产环境的屏蔽
+  production: false
+  #查看文档是是否需要账号密码
+  basic:
+    enable: true
+    username: admin
+    password: 123456
+  setting:
+    language: zh_cn

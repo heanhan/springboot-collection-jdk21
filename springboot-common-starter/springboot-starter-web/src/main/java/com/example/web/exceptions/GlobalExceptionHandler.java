@@ -91,6 +91,19 @@ public class GlobalExceptionHandler {
     }
 
 
+    /**
+     * 算术异常
+     */
+    @ExceptionHandler({ArithmeticException.class})
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResultBody exception(ArithmeticException e,HttpServletRequest request, HttpServletResponse response) {
+        log.error("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
+        String message1 = e.getMessage();
+        String message2 = getExceptionDetail(e);
+        return ResultBody.error(CommonEnum.NUMBER_FORMAT_EXCEPTION.getResultCode(), message1);
+    }
+
+
 
     /**
      * 获取代码报错详细位置信息
