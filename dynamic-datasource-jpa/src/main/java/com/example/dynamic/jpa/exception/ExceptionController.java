@@ -1,9 +1,9 @@
 package com.example.dynamic.jpa.exception;
 
 
+import com.example.common.result.ResultBody;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;

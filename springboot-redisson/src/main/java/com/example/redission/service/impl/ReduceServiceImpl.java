@@ -1,5 +1,6 @@
 package com.example.redission.service.impl;
 
+import com.example.common.result.ResultBody;
 import com.example.redission.entity.Order;
 import com.example.redission.entity.Storage;
 import com.example.redission.service.OrderService;
@@ -8,7 +9,6 @@ import com.example.redission.service.StorageService;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -28,7 +28,7 @@ public class ReduceServiceImpl implements ReduceService {
      */
     @Transactional
     @Override
-    public ResultBody handleReduceGoods(Integer produceId,Integer userId) {
+    public ResultBody handleReduceGoods(Integer produceId, Integer userId) {
         //1、先获取库存
         Storage storage=storageService.findStorageById(produceId);
         //如果库存为0  则表明抢购结束

@@ -1,6 +1,7 @@
 package com.example.dynamic.jpa.system.controller;
 
 
+import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.common.util.JwtUtil;
 import com.example.dynamic.jpa.security.AuthUserServiceImpl;
 import com.example.dynamic.jpa.security.LoginUser;
@@ -11,7 +12,6 @@ import com.example.dynamic.jpa.system.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;

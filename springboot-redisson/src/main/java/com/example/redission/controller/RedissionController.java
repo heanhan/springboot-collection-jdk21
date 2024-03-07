@@ -1,12 +1,12 @@
 package com.example.redission.controller;
 
 
+import com.example.common.enums.CommonEnum;
+import com.example.common.result.ResultBody;
 import com.example.redission.service.ReduceService;
 import com.example.redission.vo.ReduceRequestVo;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.enums.CommonEnum;
-import org.example.commons.result.ResultBody;
 import org.redisson.Redisson;
 import org.redisson.api.RLock;
 import org.springframework.web.bind.annotation.PostMapping;

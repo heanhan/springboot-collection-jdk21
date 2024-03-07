@@ -1,13 +1,13 @@
 package com.example.dynamic.jpa.security;
 
 
+import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.common.util.JSONUtils;
 import com.example.dynamic.jpa.common.util.JwtUtil;
 import com.example.dynamic.jpa.system.entity.User;
 import com.example.dynamic.jpa.system.vo.LoginInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.commons.result.ResultBody;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
