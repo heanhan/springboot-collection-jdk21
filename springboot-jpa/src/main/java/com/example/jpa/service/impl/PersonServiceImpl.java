@@ -1,12 +1,12 @@
 package com.example.jpa.service.impl;
 
-import com.example.jpa.dto.PersonDto;
-import com.example.jpa.dto.PersonWorkDto;
+import com.example.jpa.model.dto.PersonDto;
+import com.example.jpa.model.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
 import com.example.jpa.repository.PersonRepository;
 import com.example.jpa.service.PersonService;
-import com.example.jpa.vo.PersonExtraVo;
-import com.example.jpa.vo.PersonSelectParam;
+import com.example.jpa.model.vo.PersonExtraVo;
+import com.example.jpa.model.vo.PersonSelectParam;
 import jakarta.annotation.Resource;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;

@@ -1,9 +1,9 @@
 package com.example.jpa.repository;
 
-import com.example.jpa.dto.PersonDto;
-import com.example.jpa.dto.PersonWorkDto;
+import com.example.jpa.model.dto.PersonDto;
+import com.example.jpa.model.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
-import com.example.jpa.vo.PersonSelectParam;
+import com.example.jpa.model.vo.PersonSelectParam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
