@@ -1,4 +1,4 @@
-package com.example.jpa.vo;
+package com.example.jpa.model.vo;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;

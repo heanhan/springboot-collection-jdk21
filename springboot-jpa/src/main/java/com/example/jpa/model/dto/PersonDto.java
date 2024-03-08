@@ -1,17 +1,14 @@
-package com.example.jpa.vo;
+package com.example.jpa.model.dto;
 
-import com.example.jpa.config.JpaConverterListJson;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import jakarta.persistence.Convert;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
-import java.util.List;
-
 
 @Data
-public class PersonSelectParam {
+public class PersonDto {
+
 
     /**
      * ID，唯一标识列，使用主键自增策略
@@ -37,8 +34,7 @@ public class PersonSelectParam {
     /**
      * 爱好
      */
-    @Convert(converter = JpaConverterListJson.class)
-    private List<String> hover;
+    private String hover;
 
     /**
      * 创建时间
@@ -70,13 +66,13 @@ public class PersonSelectParam {
      */
     private Boolean isDeleted;
 
-    /**
-     * 当前页  默认为 0 【第一页】
-     */
-    private Integer indexSize=0;
-
-    /**
-     * 每页大小 默认每页大小为10
-     */
-    private Integer pageSize=10;
+    public PersonDto(Long id, String userName, Boolean sex, Double height, LocalDateTime lastModifiedTime, Long lastModifierId, Boolean isDeleted) {
+        this.id = id;
+        this.userName = userName;
+        this.sex = sex;
+        this.height = height;
+        this.lastModifiedTime = lastModifiedTime;
+        this.lastModifierId = lastModifierId;
+        this.isDeleted = isDeleted;
+    }
 }

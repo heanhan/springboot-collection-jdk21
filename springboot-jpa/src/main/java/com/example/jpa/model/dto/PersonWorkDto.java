@@ -1,4 +1,4 @@
-package com.example.jpa.dto;
+package com.example.jpa.model.dto;
 
 
 import lombok.Data;
