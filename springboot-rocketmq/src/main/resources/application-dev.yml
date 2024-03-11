@@ -1,0 +1,23 @@
+server:
+  port: 11001
+  servlet:
+    context-path: /mq
+spring:
+  application:
+    name: springboot-rocketmq
+rocketmq:
+  name-server: 172.16.75.111:9876
+  producer:
+    group: boot_group_1
+    #消息发送超时时间
+    send-message-timeout: 3000
+    #消息最大长度 默认为4MB
+    max-message-size: 4096
+    #同步消息发送失败的重试次数
+    retry-times-when-send-failed: 3
+    #异步消息发送失败的重试次数
+    retry-times-when-send-async-failed: 3
+  consumer:
+    group: boot_group_1
+    #每次消息拉取最大消息数
+    pull-batch-size: 10
