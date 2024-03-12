@@ -1,0 +1,12 @@
+server:
+  port: 9800
+  servlet:
+    context-path: /parameter
+  #2.3 之后新增的优雅关机，graceful:优雅关机。停止对外继续请求，处理完已经请求的；immediate：立刻关机。
+  shutdown: graceful
+spring:
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8

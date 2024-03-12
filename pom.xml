@@ -27,6 +27,7 @@
         <module>springboot-minio</module>
         <module>springboot-common-starter</module>
         <module>Springboot-test</module>
+        <module>springboot-paramter</module>
     </modules>
 
     <properties>
