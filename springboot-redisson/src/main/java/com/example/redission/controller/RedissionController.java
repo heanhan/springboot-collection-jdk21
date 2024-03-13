@@ -47,7 +47,7 @@ public class RedissionController {
             return ResultBody.success("购买成功");
         } catch (Exception e) {
             log.info("用户抢购业务出现系统异常：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         } finally {
             //3.释放锁
             redissonLock.unlock();

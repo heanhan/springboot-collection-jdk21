@@ -1,5 +1,6 @@
 package com.example.jpa.service.impl;
 
+import com.example.common.result.ResultBody;
 import com.example.jpa.model.dto.PersonDto;
 import com.example.jpa.model.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
@@ -15,7 +16,6 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.result.ResultBody;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

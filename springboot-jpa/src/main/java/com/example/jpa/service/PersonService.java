@@ -1,11 +1,11 @@
 package com.example.jpa.service;
 
+import com.example.common.result.ResultBody;
 import com.example.jpa.model.dto.PersonDto;
 import com.example.jpa.model.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
 import com.example.jpa.model.vo.PersonExtraVo;
 import com.example.jpa.model.vo.PersonSelectParam;
-import org.example.commons.result.ResultBody;
 import org.springframework.data.domain.Page;
 
 import java.util.List;

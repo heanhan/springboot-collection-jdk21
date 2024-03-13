@@ -1,6 +1,8 @@
 package com.example.jpa.controller;
 
 
+import com.example.common.enums.CommonEnum;
+import com.example.common.result.ResultBody;
 import com.example.jpa.model.dto.PersonDto;
 import com.example.jpa.model.dto.PersonWorkDto;
 import com.example.jpa.entity.Person;
@@ -9,8 +11,6 @@ import com.example.jpa.model.vo.PersonExtraVo;
 import com.example.jpa.model.vo.PersonSelectParam;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.enums.CommonEnum;
-import org.example.commons.result.ResultBody;
 import org.springframework.data.domain.Page;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
@@ -91,7 +91,7 @@ public class PersonController {
             page = personService.findPersonPageByCondition(param);
         } catch (Exception e) {
             log.info("分页查询-->捕获的异常信息：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success(page);
     }
@@ -108,7 +108,7 @@ public class PersonController {
             page = personService.findPersonPageBySql(param);
         } catch (Exception e) {
             log.info("分页查询(原生sql)-->捕获的异常信息：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success(page);
     }
@@ -125,7 +125,7 @@ public class PersonController {
             list = personService.findPersonByCondition(param);
         } catch (Exception e) {
             log.info("报错信息：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success(list);
     }
@@ -140,7 +140,7 @@ public class PersonController {
             personService.updatePerson(person);
         } catch (Exception e) {
             log.info("更新实体报错信息：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success(CommonEnum.SUCCESS);
     }
@@ -156,7 +156,7 @@ public class PersonController {
             personService.deletePerson(id);
         } catch (Exception e) {
             log.info("根据id删除报错信息：删除id{}-的报错{}",id,e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success();
     }
@@ -171,7 +171,7 @@ public class PersonController {
             list=personService.findPersonExtraInfo(personExtraVo);
         } catch (Exception e) {
             log.info("联表查询报错，报错信息为：{}",e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success(list);
     }

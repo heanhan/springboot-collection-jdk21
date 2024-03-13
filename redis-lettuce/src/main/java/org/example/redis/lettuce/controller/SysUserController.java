@@ -37,7 +37,7 @@ public class SysUserController {
             return ResultBody.error("添加失败");
         }
         if(ObjectUtils.isEmpty(result)){
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         redisUtil.set(result.getId().toString(),result);
         return ResultBody.success(CommonEnum.SUCCESS);
