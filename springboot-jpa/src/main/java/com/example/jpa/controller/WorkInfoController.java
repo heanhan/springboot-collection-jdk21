@@ -1,12 +1,12 @@
 package com.example.jpa.controller;
 
 
+import com.example.common.enums.CommonEnum;
+import com.example.common.result.ResultBody;
 import com.example.jpa.entity.WorkInfo;
 import com.example.jpa.service.WorkInfoService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.example.commons.enums.CommonEnum;
-import org.example.commons.result.ResultBody;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,7 +31,7 @@ public class WorkInfoController {
             WorkInfo info = workInfoService.addWorkInfo(workInfo);
         } catch (Exception e) {
             log.info("工作经历添加失败,报错信息：{}", e.getMessage());
-            return ResultBody.error(CommonEnum.INTERNAL_SERVER_ERROR);
+            return ResultBody.error(CommonEnum.ERROR);
         }
         return ResultBody.success();
 

@@ -10,34 +10,100 @@ import com.example.common.exceptins.BaseErrorInfoInterface;
  * @Created by zhaojh0912
  */
 public enum CommonEnum implements BaseErrorInfoInterface {
-
-
-    // 数据操作错误定义
-    SUCCESS(200, "成功"),
-
+    /**
+     * 成功
+     */
+    SUCCESS(200, "操作成功"),
 
     /**
-     * 4xx 请求资源码信息
+     * 系统错误
      */
-    BODY_NOT_MATCH(400,"请求的数据格式不符"),
-    SIGNATURE_NOT_MATCH(401,"请求的数字签名不匹配"),
-    NOT_FOUND(404, "未找到该资源"),
-
-
+    ERROR(500, "系统错误"),
 
     /**
-     * 5xx 响应码信息
+     * 操作失败
      */
-    INTERNAL_SERVER_ERROR(500, "服务器内部错误!"),
-    SERVER_BUSY(503,"服务器正忙，请稍后再试!"),
-    NUMBER_FORMAT_EXCEPTION(504,"数字格式异常!"),
-    NULL_POINTER_EXCEPTION(505,"空指针异常!"),
-
+    FAILED(101, "操作失败"),
 
     /**
-     * 6xx 参数校验码信息
+     * 未登录/登录超时
      */
-    PARAMTER_ERROR(600,"参数校验失败，请核对参数");
+    UNAUTHORIZED(102, "登录超时"),
+
+    /**
+     * 参数错误
+     */
+    PARAM_ERROR(103, "参数错误"),
+
+    /**
+     * 参数错误-已存在
+     */
+    INVALID_PARAM_EXIST(104, "请求参数已存在"),
+
+    /**
+     * 参数错误
+     */
+    INVALID_PARAM_EMPTY(105, "请求参数为空"),
+
+    /**
+     * 参数错误
+     */
+    PARAM_TYPE_MISMATCH(106, "参数类型不匹配"),
+
+    /**
+     * 参数错误
+     */
+    PARAM_VALID_ERROR(107, "参数校验失败"),
+
+    /**
+     * 参数错误
+     */
+    ILLEGAL_REQUEST(108, "非法请求"),
+
+    /**
+     * 验证码错误
+     */
+    INVALID_VCODE(204, "验证码错误"),
+
+    /**
+     * 用户名或密码错误
+     */
+    INVALID_USERNAME_PASSWORD(205, "账号或密码错误"),
+
+    /**
+     *
+     */
+    INVALID_RE_PASSWORD(206, "两次输入密码不一致"),
+
+    /**
+     * 用户名或密码错误
+     */
+    INVALID_OLD_PASSWORD(207, "旧密码错误"),
+
+    /**
+     * 用户名重复
+     */
+    USERNAME_ALREADY_IN(208, "用户名已存在"),
+
+    /**
+     * 用户不存在
+     */
+    INVALID_USERNAME(209, "用户名不存在"),
+
+    /**
+     * 角色不存在
+     */
+    INVALID_ROLE(210, "角色不存在"),
+
+    /**
+     * 角色不存在
+     */
+    ROLE_USED(211, "角色使用中，不可删除"),
+
+    /**
+     * 没有权限
+     */
+    NO_PERMISSION(403, "当前用户无该接口权限");
 
     /** 错误码 */
     private Integer resultCode;

@@ -12,10 +12,7 @@
 
     <modules>
         <module>redis-lettuce</module>
-        <module>mongodb-server</module>
         <module>any_position_start_file</module>
-        <module>validates</module>
-        <module>global-exception-starter</module>
         <module>elasticsearch-server</module>
         <module>dynamic-datasource-jpa</module>
         <module>dynamic-datasource-mybatis</module>
@@ -27,6 +24,8 @@
         <module>springboot-common-starter</module>
         <module>Springboot-test</module>
         <module>springboot-parameter</module>
+        <module>springboot-validation</module>
+        <module>springboot-mongodb</module>
     </modules>
 
     <properties>

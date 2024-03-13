@@ -1,7 +1,9 @@
 package com.example.test;
 
+import com.example.web.exceptions.GlobalExceptionHandler;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 
 /**
  * Hello world!
@@ -16,4 +18,8 @@ public class TestApplication
     }
 
 
+    @Bean
+    public GlobalExceptionHandler globalExceptionHandler(){
+        return new GlobalExceptionHandler();
+    }
 }
