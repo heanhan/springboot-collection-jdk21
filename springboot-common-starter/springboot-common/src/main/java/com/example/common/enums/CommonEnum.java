@@ -60,6 +60,9 @@ public enum CommonEnum implements BaseErrorInfoInterface {
      */
     ILLEGAL_REQUEST(108, "非法请求"),
 
+
+    ARITHMETIC_EXCEPTION(109, "算数异常"),
+
     /**
      * 验证码错误
      */
@@ -103,7 +106,10 @@ public enum CommonEnum implements BaseErrorInfoInterface {
     /**
      * 没有权限
      */
-    NO_PERMISSION(403, "当前用户无该接口权限");
+    NO_PERMISSION(403, "当前用户无该接口权限"),
+
+
+    CUSTOM_EXCEPTION(1001,"用户自定义的异常");
 
     /** 错误码 */
     private Integer resultCode;

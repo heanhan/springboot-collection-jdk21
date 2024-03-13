@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.NotReadablePropertyException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.InitBinder;
@@ -75,9 +74,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(value = BizException.class)
     public ResultBody bizExceptionHandler(HttpServletRequest req, BizException e, HttpServletResponse response) {
-        log.error("发生业务异常！原因是：{}", e.getErrorMsg());
-
-        return ResultBody.error(e.getErrorCode(), "报错的服务: "+errorSystem +",错误详情: "+ errorSystem + e.toString());
+        log.info("发生业务异常！原因是：{}", e.getErrorMsg());
+        log.info("报错的服务: "+errorSystem +",错误详情: "+ errorSystem + e.toString());
+        return ResultBody.error(CommonEnum.CUSTOM_EXCEPTION);
     }
 
 
@@ -127,7 +126,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResultBody exception(IllegalArgumentException e,HttpServletRequest request, HttpServletResponse response) {
-        log.error("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
+        log.info("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
+        log.info("报错的服务: "+errorSystem +",错误详情: "+ e.toString());
         return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
     }
 
@@ -137,8 +137,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler({ArithmeticException.class})
     public ResultBody exception(ArithmeticException e,HttpServletRequest request, HttpServletResponse response) {
-        log.error("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
-        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
+        log.info("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
+        log.info("报错的服务: "+errorSystem +",错误详情: "+ e.toString());
+        return ResultBody.error(CommonEnum.ARITHMETIC_EXCEPTION);
     }
 
     /**
