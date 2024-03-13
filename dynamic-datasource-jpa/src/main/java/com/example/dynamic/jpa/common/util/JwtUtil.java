@@ -107,9 +107,10 @@ public class JwtUtil {
      * 解析jwt
      */
     public static Claims getTokenBody(String token, String secret) {
-        return Jwts.parser()
-                .setSigningKey(secret)
-                .parseClaimsJws(token)
-                .getBody();
+//        return Jwts.parser()
+//                .setSigningKey(secret)
+//                .parseClaimsJws(token)
+//                .getBody();
+        return null;
     }
 }
