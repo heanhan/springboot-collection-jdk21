@@ -9,17 +9,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 简单的类属性进行校验
- */
-
-
 @Slf4j
 @RequestMapping(value = "/user")
 @RestController
 public class UserController {
 
 
+    /**
+     * 简单的雷属性进行校验
+     * @param userVo
+     * @return
+     */
     @PostMapping(value = "/validateUserAttribution")
     public ResultBody validateUserAttribution(@RequestBody @Validated UserVo userVo){
         log.info("进入方法内部");
