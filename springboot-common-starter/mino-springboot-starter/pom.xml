@@ -5,13 +5,14 @@
         <groupId>org.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <groupId>com.example.minio</groupId>
-    <artifactId>springboot-minio</artifactId>
+    <groupId>com.example.minio.starter</groupId>
+    <artifactId>mino-springboot-starter</artifactId>
     <packaging>jar</packaging>
 
-    <name>springboot-minio</name>
+    <name>mino-springboot-starter</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -20,17 +21,24 @@
     <dependencies>
 
         <dependency>
-            <groupId>com.example.web</groupId>
-            <artifactId>springboot-starter-web</artifactId>
+            <groupId>com.example.common</groupId>
+            <artifactId>springboot-common</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.example.auto.import.starter</groupId>
+            <artifactId>auto-import-springboot-starter</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <!--minio-->
         <dependency>
-            <groupId>com.example.minio.starter</groupId>
-            <artifactId>mino-springboot-starter</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.2.0</version>
         </dependency>
+
 
     </dependencies>
 </project>

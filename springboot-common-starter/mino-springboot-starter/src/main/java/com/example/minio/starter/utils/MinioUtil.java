@@ -1,6 +1,6 @@
-package com.example.minio.utils;
+package com.example.minio.starter.utils;
 
-import com.example.minio.dto.FileInfo;
+import com.example.minio.starter.dto.FileInfo;
 import io.minio.BucketExistsArgs;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;

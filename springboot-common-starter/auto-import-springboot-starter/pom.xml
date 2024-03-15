@@ -5,32 +5,29 @@
         <groupId>org.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <groupId>com.example.minio</groupId>
-    <artifactId>springboot-minio</artifactId>
+    <groupId>com.example.auto.import.starter</groupId>
+    <artifactId>auto-import-springboot-starter</artifactId>
     <packaging>jar</packaging>
 
-    <name>springboot-minio</name>
+    <name>auto-import-springboot-starter</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
-
         <dependency>
-            <groupId>com.example.web</groupId>
-            <artifactId>springboot-starter-web</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
 
-        <!--minio-->
         <dependency>
-            <groupId>com.example.minio.starter</groupId>
-            <artifactId>mino-springboot-starter</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
         </dependency>
-
     </dependencies>
 </project>
