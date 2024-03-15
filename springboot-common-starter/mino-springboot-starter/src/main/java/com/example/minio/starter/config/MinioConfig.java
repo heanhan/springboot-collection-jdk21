@@ -1,4 +1,4 @@
-package com.example.minio.config;
+package com.example.minio.starter.config;
 
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,9 +23,8 @@ public class MinioConfig {
 
     @Bean
     public MinioClient getMinioClient() {
-        MinioClient minioClient = MinioClient.builder().endpoint(url)
+        return MinioClient.builder().endpoint(url)
                 .credentials(accessKey, secretKey).build();
-        return minioClient;
     }
 
 }

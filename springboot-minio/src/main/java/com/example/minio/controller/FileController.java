@@ -1,8 +1,8 @@
 package com.example.minio.controller;
 
 import com.example.common.result.ResultBody;
-import com.example.minio.dto.FileInfo;
-import com.example.minio.utils.MinioUtil;
+import com.example.minio.starter.dto.FileInfo;
+import com.example.minio.starter.utils.MinioUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletResponse;

@@ -43,14 +43,9 @@
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
+            <groupId>com.example.auto.import.starter</groupId>
+            <artifactId>auto-import-springboot-starter</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
 
         <!-- 参数校验 -->

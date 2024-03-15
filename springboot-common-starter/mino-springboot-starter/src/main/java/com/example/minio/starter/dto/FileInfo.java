@@ -1,4 +1,4 @@
-package com.example.minio.dto;
+package com.example.minio.starter.dto;
 
 import lombok.Data;
 
@@ -22,3 +22,4 @@ public class FileInfo {
 
 
 }
+
