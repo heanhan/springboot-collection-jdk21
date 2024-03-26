@@ -28,6 +28,7 @@
         <module>springboot-mongodb</module>
         <module>springboot-common-starter/mino-springboot-starter</module>
         <module>springboot-common-starter/auto-import-springboot-starter</module>
+        <module>springboot-oauth</module>
     </modules>
 
     <properties>
