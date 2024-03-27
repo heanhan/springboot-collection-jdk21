@@ -10,7 +10,7 @@ import com.example.common.exceptins.BaseErrorInfoInterface;
  * @Date 2023/11/28 11:24 上午
  * @Created by zhaojh0912
  */
-public class ResultBody {
+public class ResultBody<T> {
     /**
      * 响应代码
      */
@@ -24,15 +24,10 @@ public class ResultBody {
     /**
      * 响应结果
      */
-    private Object result;
+    private T result;
 
-    public ResultBody() {
-    }
+    private BaseErrorInfoInterface errorInfo;
 
-    public ResultBody(BaseErrorInfoInterface errorInfo) {
-        this.code = errorInfo.getResultCode();
-        this.message = errorInfo.getResultMsg();
-    }
 
     public Integer getCode() {
         return code;
@@ -50,20 +45,28 @@ public class ResultBody {
         this.message = message;
     }
 
-    public Object getResult() {
+    public T getResult() {
         return result;
     }
 
-    public void setResult(Object result) {
+    public void setResult(T result) {
         this.result = result;
     }
 
+    public ResultBody(BaseErrorInfoInterface errorInfo) {
+        this.code = errorInfo.getResultCode();
+        this.message = errorInfo.getResultMsg();
+    }
+
+    public ResultBody() {
+    }
+    
     /**
      * 成功
      *
      * @return
      */
-    public static ResultBody success() {
+    public static <T> ResultBody<T> success() {
         return success(null);
     }
 
@@ -72,7 +75,7 @@ public class ResultBody {
      * @param data
      * @return
      */
-    public static ResultBody success(Object data) {
+    public static <T> ResultBody<T> success(Object data) {
         ResultBody rb = new ResultBody();
         rb.setCode(CommonEnum.SUCCESS.getResultCode());
         rb.setMessage(CommonEnum.SUCCESS.getResultMsg());
@@ -83,7 +86,7 @@ public class ResultBody {
     /**
      * 失败
      */
-    public static ResultBody error(BaseErrorInfoInterface errorInfo) {
+    public static <T> ResultBody<T> error(BaseErrorInfoInterface errorInfo) {
         ResultBody rb = new ResultBody();
         rb.setCode(errorInfo.getResultCode());
         rb.setMessage(errorInfo.getResultMsg());
@@ -94,7 +97,7 @@ public class ResultBody {
     /**
      * 失败
      */
-    public static ResultBody error(Integer code, String message) {
+    public static <T> ResultBody<T> error(Integer code, String message) {
         ResultBody rb = new ResultBody();
         rb.setCode(code);
         rb.setMessage(message);
@@ -105,7 +108,7 @@ public class ResultBody {
     /**
      * 失败
      */
-    public static ResultBody error( String message) {
+    public static <T> ResultBody<T> error( String message) {
         ResultBody rb = new ResultBody();
         rb.setCode(-1);
         rb.setMessage(message);
