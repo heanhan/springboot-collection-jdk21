@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.example</groupId>
+    <groupId>com.example</groupId>
     <artifactId>springboot-collection-jdk21</artifactId>
     <version>1.0-SNAPSHOT</version>
 
@@ -26,9 +26,8 @@
         <module>springboot-parameter</module>
         <module>springboot-validation</module>
         <module>springboot-mongodb</module>
-        <module>springboot-common-starter/mino-springboot-starter</module>
-        <module>springboot-common-starter/auto-import-springboot-starter</module>
         <module>springboot-oauth</module>
+        <module>springboot-mysql-sharding</module>
     </modules>
 
     <properties>
