@@ -28,6 +28,7 @@
         <module>springboot-mongodb</module>
         <module>springboot-oauth</module>
         <module>springboot-mysql-sharding</module>
+        <module>springboot-active7</module>
     </modules>
 
     <properties>
