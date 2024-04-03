@@ -1,4 +1,4 @@
-package com.example.sharding;
+package com.example.active7;
 
 import junit.framework.Test;
 import junit.framework.TestCase;
