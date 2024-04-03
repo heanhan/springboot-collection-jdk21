@@ -1,6 +1,5 @@
 package com.example.jpa.controller;
 
-
 import com.example.common.enums.CommonEnum;
 import com.example.common.result.ResultBody;
 import com.example.jpa.model.dto.PersonDto;
