@@ -1,0 +1,12 @@
+server:
+  port: 9888
+  servlet:
+    context-path: /oauth2
+spring:
+  application:
+    name: springboot-oauth2-server
+  datasource:
+    url: jdbc:mysql://localhost:3306/unified_certification?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=UTC
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: abcd@123456
