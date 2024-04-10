@@ -5,7 +5,8 @@ server:
     context-path: /elastic
 spring:
   elasticsearch:
-    uris: http://172.16.75.110:9300
+    #可以配置多个 urls是一个list
+    uris: http://172.16.75.110:9200
     username: elastic
     password: abcd@123456
     #连接超时 10秒  默认1秒
