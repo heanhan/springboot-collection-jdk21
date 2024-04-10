@@ -13,7 +13,6 @@
     <modules>
         <module>redis-lettuce</module>
         <module>any_position_start_file</module>
-        <module>elasticsearch-server</module>
         <module>dynamic-datasource-jpa</module>
         <module>dynamic-datasource-mybatis</module>
         <module>springboot-rocketmq</module>
@@ -29,6 +28,7 @@
         <module>springboot-oauth</module>
         <module>springboot-mysql-sharding</module>
         <module>springboot-active7</module>
+        <module>springboot-elasticsearch</module>
     </modules>
 
     <properties>
