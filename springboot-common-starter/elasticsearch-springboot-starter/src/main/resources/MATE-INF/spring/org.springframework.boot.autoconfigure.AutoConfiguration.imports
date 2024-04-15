@@ -1,0 +1,2 @@
+com.xxx.commons.springboot.elasticsearch.ElasticsearchTemplateAutoConfiguration
+com.xxx.commons.springboot.elasticsearch.actuate.xxxElasticsearchHealthIndicatorAutoConfiguration

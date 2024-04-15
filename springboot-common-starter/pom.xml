@@ -18,6 +18,7 @@
         <module>springboot-starter-web</module>
         <module>auto-import-springboot-starter</module>
         <module>mino-springboot-starter</module>
+        <module>elasticsearch-springboot-starter</module>
     </modules>
 
     <properties>

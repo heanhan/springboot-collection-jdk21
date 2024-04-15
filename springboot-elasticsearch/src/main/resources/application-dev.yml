@@ -1,6 +1,6 @@
 # elasticsearch的使用
 server:
-  port: 9501
+  port: 9070
   servlet:
     context-path: /elastic
 spring:
