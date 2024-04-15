@@ -11,7 +11,7 @@
     <artifactId>Springboot-test</artifactId>
     <packaging>jar</packaging>
 
-    <name>Springboo-test</name>
+    <name>springboot-test</name>
     <url>http://maven.apache.org</url>
 
     <properties>
@@ -27,4 +27,9 @@
         </dependency>
 
     </dependencies>
+
+    <build>
+        <!--suppress UnresolvedMavenProperty -->
+        <finalName>${name}</finalName>
+    </build>
 </project>
