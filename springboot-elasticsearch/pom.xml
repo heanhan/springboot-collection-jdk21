@@ -29,31 +29,24 @@
             <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
             <exclusions>
                 <exclusion>
-                    <groupId>jakarta.json</groupId>
-                    <artifactId>jakarta.json-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>elasticsearch</artifactId>
-                    <groupId>org.elasticsearch</groupId>
-                </exclusion>
-                <exclusion>
                     <artifactId>elasticsearch-java</artifactId>
                     <groupId>co.elastic.clients</groupId>
                 </exclusion>
+
                 <exclusion>
-                    <artifactId>lang-mustache-client</artifactId>
-                    <groupId>org.elasticsearch.plugin</groupId>
+                    <groupId>org.elasticsearch.client</groupId>
+                    <artifactId>elasticsearch-rest-client</artifactId>
                 </exclusion>
-                <exclusion>
-                    <artifactId>parent-join-client</artifactId>
-                    <groupId>org.elasticsearch.plugin</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>rank-eval-client</artifactId>
-                    <groupId>org.elasticsearch.plugin</groupId>
-                </exclusion>
+
             </exclusions>
         </dependency>
+
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>elasticsearch-rest-client</artifactId>
+            <version>7.17.20</version>
+        </dependency>
+
 
         <dependency>
             <groupId>org.elasticsearch</groupId>

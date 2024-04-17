@@ -1,5 +1,6 @@
 package com.example.elk.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,6 +9,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.util.Date;
 
@@ -15,11 +17,11 @@ import java.util.Date;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
-@Document(indexName = "discusspost", shards = 6, replicas = 3)
+@Document(indexName = "discuss_post")
 public class DiscussPost {
 
     @Id
-    private int id;
+    private String id;
 
     // 用户id
     @Field(type = FieldType.Integer, name = "price")
@@ -42,6 +44,8 @@ public class DiscussPost {
     private int status;
 
     // 帖子创建的时间
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     @Field(type = FieldType.Date)
     private Date createTime;
 
