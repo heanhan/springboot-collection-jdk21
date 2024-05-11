@@ -75,8 +75,8 @@ public class ResultBody<T> {
      * @param data
      * @return
      */
-    public static <T> ResultBody<T> success(Object data) {
-        ResultBody rb = new ResultBody();
+    public static <T> ResultBody<T> success(T data) {
+        ResultBody<T> rb = new ResultBody<T>();
         rb.setCode(CommonEnum.SUCCESS.getResultCode());
         rb.setMessage(CommonEnum.SUCCESS.getResultMsg());
         rb.setResult(data);
