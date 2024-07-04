@@ -39,14 +39,12 @@ public class UserLoginController {
             Authentication authentication = authenticationManager.authenticate(auth);
             SecurityContextHolder.getContext().setAuthentication(authentication);
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-
             //获取用户权限信息
             String authorityString = "";
             Collection<? extends GrantedAuthority> authorities = userDetails.getAuthorities();
             for (GrantedAuthority authority : authorities) {
                 authorityString = authority.getAuthority();
             }
-
             //用户身份验证成功，生成并返回jwt令牌
             Map<String, Object> claims = new HashMap<>();
             claims.put("username", userDetails.getUsername());

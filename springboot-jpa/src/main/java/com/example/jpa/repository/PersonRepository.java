@@ -58,7 +58,7 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
     Page<Person> findPersonPageBySql(@Param("param") PersonSelectParam param, Pageable pageable);
 
 
-    @Query(value="select new com.example.jpa.dto.PersonDto(p.id,p.userName, p.sex, p.height, p.lastModifiedTime, p.lastModifierId, p.isDeleted) from Person as p" +
+    @Query(value="select new com.example.jpa.model.dto.PersonDto(p.id,p.userName, p.sex, p.height, p.lastModifiedTime, p.lastModifierId, p.isDeleted) from Person as p" +
             " where p.isDeleted=false" +
             " AND (:#{#param.getUserName()} is null or p.userName LIKE %:#{#param.getUserName()}%) "
             ,nativeQuery = false)
@@ -73,7 +73,7 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
      * @param beginWorkTime 工作开始时间
      * @return
      */
-    @Query(value = "select new com.example.jpa.dto.PersonWorkDto(p.id, p.userName, p.sex, p.selfInfo, w.id, w.workName, w.workLevel, w.workContent) " +
+    @Query(value = "select new com.example.jpa.model.dto.PersonWorkDto(p.id, p.userName, p.sex, p.selfInfo, w.id, w.workName, w.workLevel, w.workContent) " +
             " from Person p , WorkInfo  w " +
             " where p.id=w.personId" +
             " and p.isDeleted =false  " +
