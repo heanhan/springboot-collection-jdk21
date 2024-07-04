@@ -1,0 +1,40 @@
+server:
+  port: 8890
+  servlet:
+    context-path: /active
+spring:
+  application:
+    name: springboot-active7
+  main:
+    allow-bean-definition-overriding: true
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/springboot-active7?characterEncoding=utf8&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true
+    username: root
+    password: abcd@123456
+  #配置activiti
+  activiti:
+    db-history-used: true
+    #none：不保存任何的历史数据，因此在流程执行过程中，这是最高效
+    #activity: 级别高于none 保存流程实例与流程行为，其他数据不保存
+    #audit : 除activity级别会保存的数据外，还会保存全部的流程任务及其属性，audit为history 的默认值。
+    #full 保存历史数据最高级别，除了会保存audit 级别的数据外，还会保存其他全部流程相关的细节数据包括一些流程参数。
+    history-level: full
+    #false 默认值，activiti 启动时，对比数据库中保存的版本，如果没有表或者版本不匹配将抛出异常
+    #true activiti 会对数据中所有的表进行更新，如果不存在、不一致 。则自动创建、更新
+    #create_drop 在activiti启动时创建表，在关闭是删除表（必须手动关闭引擎，才能删除表）
+    #drop-create： 在activiti启动时删除原来的旧表，然后在创建新表（不需要手动关闭引擎
+    database-schema-update: update
+    #检验流程文件，默认校验resource下的processes 文件夹下的流程文件
+    check-process-definitions: false
+    async-executor-activate: true
+#配置mybatis-plus
+mybatis-plus:
+  configuration:
+    #开启驼峰命名自动映射
+    map-underscore-to-camel-case: true
+    #开启日志打印
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  type-aliases-package: com.example.active7.entity
+  #扫描mapper文件
+  mapper-locations: classpath:mapper/*.xml
