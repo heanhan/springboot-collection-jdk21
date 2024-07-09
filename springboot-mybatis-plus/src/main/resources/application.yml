@@ -1,0 +1,10 @@
+#配置服务的信息
+server:
+  port: 8989
+spring:
+  profiles:
+    active: dev
+  application:
+    name: springboot-mybatis-plus
+  main:
+    banner-mode: off

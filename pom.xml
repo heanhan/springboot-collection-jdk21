@@ -29,6 +29,7 @@
         <module>springboot-mysql-sharding</module>
         <module>springboot-active7</module>
         <module>springboot-elasticsearch</module>
+        <module>springboot-mybatis-plus</module>
     </modules>
 
     <properties>
