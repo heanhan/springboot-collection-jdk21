@@ -31,7 +31,7 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
      */
     @Query(value = "select p.id, p.user_name, p.sex, p.height, p.hover, p.self_info, p.creator_id,p.last_modifier_id, p.last_modified_time,p.created_time,p.is_deleted,p.password from t_person p " +
             " where p.is_deleted=false " +
-            " and if(?1!='',p.user_name like concat(\"%\",?1,\"%\"),1=1) " +
+            " and if(?1!='',p.user_name like concat('%',?1,'%'),1=1) " +
             " and if(?2!='',p.height>?2,1=1) "
             ,nativeQuery = true)
 //    List<Person> findPersonByCondition0(@Param("userName") String userName, @Param("height") Double height, @Param("lastModifiedTime") LocalDateTime lastModifiedTime);
@@ -52,16 +52,15 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
     List<Person> findPersonByCondition1(@Param(value = "person") Person person);
 
     @Query(value = "select p.* from t_person p  where p.is_deleted=false" +
-            " and   if(:#{#param.userName} !='',p.user_name like concat(\"%\",:#{#param.getUserName()},\"%\"),1=1) " +
+            " and   if(:#{#param.userName} !='',p.user_name like concat('%',:#{#param.getUserName()},'%'),1=1) " +
             " order by p.last_modified_time "
             ,nativeQuery = true)
     Page<Person> findPersonPageBySql(@Param("param") PersonSelectParam param, Pageable pageable);
 
 
-    @Query(value="select new com.example.jpa.model.dto.PersonDto(p.id,p.userName, p.sex, p.height, p.lastModifiedTime, p.lastModifierId, p.isDeleted) from Person as p" +
+    @Query(value="select PersonDto(p.id,p.userName, p.sex, p.height, p.lastModifiedTime, p.lastModifierId, p.isDeleted) from Person as p" +
             " where p.isDeleted=false" +
-            " AND (:#{#param.getUserName()} is null or p.userName LIKE %:#{#param.getUserName()}%) "
-            ,nativeQuery = false)
+            " AND (:#{#param.getUserName()} is null or p.userName LIKE %:#{#param.getUserName()}%) " )
     List<PersonDto> findPersonByCondition(@Param("param") PersonSelectParam param);
 
 
@@ -73,7 +72,7 @@ public interface PersonRepository extends JpaRepository<Person, Long>, JpaSpecif
      * @param beginWorkTime 工作开始时间
      * @return
      */
-    @Query(value = "select new com.example.jpa.model.dto.PersonWorkDto(p.id, p.userName, p.sex, p.selfInfo, w.id, w.workName, w.workLevel, w.workContent) " +
+    @Query(value = "select PersonWorkDto(p.id, p.userName, p.sex, p.selfInfo, w.id, w.workName, w.workLevel, w.workContent) " +
             " from Person p , WorkInfo  w " +
             " where p.id=w.personId" +
             " and p.isDeleted =false  " +
