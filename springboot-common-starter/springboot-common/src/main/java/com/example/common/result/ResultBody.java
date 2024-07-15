@@ -59,6 +59,7 @@ public class ResultBody<T> {
     }
 
     public ResultBody() {
+
     }
     
     /**
@@ -67,7 +68,7 @@ public class ResultBody<T> {
      * @return
      */
     public static <T> ResultBody<T> success() {
-        return success(null);
+        return success(CommonEnum.SUCCESS);
     }
 
     /**
@@ -84,12 +85,34 @@ public class ResultBody<T> {
     }
 
     /**
+     * 成功
+     */
+    public static <T> ResultBody<T> success(CommonEnum commonEnum) {
+        ResultBody<T> rb = new ResultBody<T>();
+        rb.setCode(commonEnum.getResultCode());
+        rb.setMessage(commonEnum.getResultMsg());
+        rb.setResult(null);
+        return rb;
+    }
+
+    /**
      * 失败
      */
     public static <T> ResultBody<T> error(BaseErrorInfoInterface errorInfo) {
         ResultBody rb = new ResultBody();
         rb.setCode(errorInfo.getResultCode());
         rb.setMessage(errorInfo.getResultMsg());
+        rb.setResult(null);
+        return rb;
+    }
+
+    /**
+     * 失败
+     */
+    public static <T> ResultBody<T> error(CommonEnum commonEnum) {
+        ResultBody rb = new ResultBody();
+        rb.setCode(commonEnum.getResultCode());
+        rb.setMessage(commonEnum.getResultMsg());
         rb.setResult(null);
         return rb;
     }

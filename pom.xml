@@ -30,6 +30,7 @@
         <module>springboot-active7</module>
         <module>springboot-elasticsearch</module>
         <module>springboot-mybatis-plus</module>
+        <module>springboot-common-starter/generator-mybatis-common</module>
     </modules>
 
     <properties>
@@ -75,5 +76,25 @@
         </dependencies>
 
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <!--        <version>3.11.0</version>-->
+                <configuration>
+                    <parameters>true</parameters>
+                    <source>21</source>
+                    <target>21</target>
+                    <basedir/>
+                    <buildDirectory/>
+                    <mainOutputDirectory/>
+                    <outputDirectory/>
+                    <projectArtifact/>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
