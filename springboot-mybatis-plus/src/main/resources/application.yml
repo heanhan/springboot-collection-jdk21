@@ -6,5 +6,12 @@ spring:
     active: dev
   application:
     name: springboot-mybatis-plus
-  main:
-    banner-mode: off
+knife4j:
+  enable: true
+  setting:
+    enable-swagger-models: true
+    language: zh_cn
+    swagger-model-name: 实体类
+logging:
+  level:
+    web: error

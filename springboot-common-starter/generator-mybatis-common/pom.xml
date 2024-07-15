@@ -5,30 +5,25 @@
         <groupId>com.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>springboot-mybatis-plus</artifactId>
+    <artifactId>generator-mybatis-common</artifactId>
+    <version>1.0</version>
     <packaging>jar</packaging>
 
-    <name>springboot-mybatis-plus</name>
+    <name>generator-mybatis-common</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
+
         <dependency>
             <groupId>com.example.web</groupId>
             <artifactId>springboot-starter-web</artifactId>
             <version>1.0-SNAPSHOT</version>
-        </dependency>
-
-        <!--MySQL-->
-        <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-            <version>8.2.0</version>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
@@ -37,16 +32,32 @@
             <version>3.5.7</version>
         </dependency>
 
-        <!--druid 的坐标-->
+
+        <!--mybatisplus自动生成代码依赖-->
         <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-starter</artifactId>
-            <version>1.2.16</version>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-generator</artifactId>
+            <version>3.5.7</version>
+        </dependency>
+
+        <!-- MySQL 驱动 -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.21</version>
         </dependency>
 
 
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-freemarker</artifactId>
+        </dependency>
 
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>3.8.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
-
-
 </project>
