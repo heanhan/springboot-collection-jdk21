@@ -21,6 +21,28 @@ public enum CommonEnum implements BaseErrorInfoInterface {
     ERROR(500, "系统错误"),
 
     /**
+     * 系统错误：新增操作错误
+     */
+    ERROR_INSERT(501, "系统错误:新增操作错误！"),
+
+    /**
+     * 系统错误：删除错误
+     */
+    ERROR_DELETED(502, "系统错误:删除操作错误！"),
+
+
+    /**
+     * 系统错误：更新操作错误
+     */
+    ERROR_UPDATE(500, "系统错误:更新操作错误！"),
+
+    /**
+     * 系统错误：查询操作错误
+     */
+    ERROR_SELECT(500, "系统错误:查询操作错误！"),
+
+
+    /**
      * 操作失败
      */
     FAILED(101, "操作失败"),

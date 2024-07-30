@@ -3,7 +3,11 @@ package com.example.mybatis.service;
 import com.example.mybatis.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.example.mybatis.model.dto.UserDto;
+import com.example.mybatis.model.vo.SelectUserVo;
+import com.example.mybatis.model.vo.UpdateUserVo;
 import com.example.mybatis.model.vo.UserVo;
+
+import java.util.List;
 
 /**
  * <p>
@@ -28,4 +32,25 @@ public interface UserService extends IService<User> {
      * @return
      */
     UserDto findUserById(Long id);
+
+    /**
+     * 更新用户信息
+     * @param vo 参数vo
+     * @return boolean
+     */
+    Boolean updateUserInfo(UpdateUserVo vo);
+
+    /**
+     * 删除操作 通过用户id
+     * @param id 用户id
+     * @return
+     */
+    Boolean deleteUserById(Long id);
+
+    /**
+     * 查询用户列表 带有动态多条件查询
+     * @param vo
+     * @return
+     */
+    List<User> findAllUserList(SelectUserVo vo);
 }
