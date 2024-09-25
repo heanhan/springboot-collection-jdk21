@@ -6,7 +6,6 @@ import com.example.common.result.ResultBody;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.NotReadablePropertyException;
 import org.springframework.beans.factory.annotation.Value;
@@ -76,7 +75,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResultBody bizExceptionHandler(HttpServletRequest req, BizException e, HttpServletResponse response) {
         log.error("发生业务异常！原因是：{}", e.getErrorMsg());
         log.error("服务报错详情：{},", "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
-        return ResultBody.error(e.getErrorCode(), "报错的服务: "+errorSystem +",错误详情: "+ errorSystem + e.toString());
+        return ResultBody.error(e.getErrorCode(), "报错的服务: "+errorSystem +",错误详情: "+ errorSystem + e.getMessage());
     }
 
     /**
@@ -92,13 +91,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({NotReadablePropertyException.class})
     public ResultBody handleNotReadablePropertyException(NotReadablePropertyException ex, HttpServletResponse response) {
         log.error("服务报错详情：{},", "报错的服务: "+errorSystem +",错误详情: "+ ex.toString());
-        return ResultBody.error(CommonEnum.PARAM_ERROR.getResultCode(),"报错的服务: "+errorSystem +",错误详情: "+ ex.toString());
+        return ResultBody.error(CommonEnum.PARAM_ERROR.getResultCode(),"报错的服务: "+errorSystem +",错误详情: "+ ex.getMessage());
     }
 
     @ExceptionHandler({NumberFormatException.class})
     public ResultBody handleNumberFormatException(NumberFormatException ex, HttpServletResponse response) {
         log.error("服务报错详情：{},", "报错的服务: "+errorSystem +",错误详情: "+ ex.toString());
-        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ ex.toString());
+        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ ex.getMessage());
     }
 
     /**
@@ -108,7 +107,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResultBody exception(IllegalArgumentException e,HttpServletRequest request, HttpServletResponse response) {
         log.error("request method:{} uri:{}", request.getMethod(), request.getRequestURI());
         log.error("服务报错详情：{},", "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
-        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
+        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.getMessage());
     }
 
 
@@ -119,7 +118,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResultBody exception(ArithmeticException e,HttpServletRequest request, HttpServletResponse response) {
         log.error("request error!! method:{} uri:{}", request.getMethod(), request.getRequestURI());
         log.error("服务报错详情：{},", "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
-        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.toString());
+        return ResultBody.error(CommonEnum.PARAM_TYPE_MISMATCH.getResultCode(), "报错的服务: "+errorSystem +",错误详情: "+ e.getMessage());
     }
 
     /**
@@ -137,6 +136,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         }catch (Exception x){
             log.error("异常处理body清空错误",x);
         }
-        return ResultBody.error(CommonEnum.ERROR.getResultCode(),"报错的服务: "+errorSystem +",错误详情: "+ e.toString());
+        log.error("未错误详情:", e.toString());
+        return ResultBody.error(CommonEnum.ERROR.getResultCode(),"报错的服务: "+errorSystem +",错误详情: "+ e.getMessage());
     }
 }
