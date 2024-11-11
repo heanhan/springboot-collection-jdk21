@@ -2,10 +2,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.example</groupId>
-        <artifactId>springboot-collection-jdk21</artifactId>
-        <version>1.0</version>
-        <relativePath>../../pom.xml</relativePath>
+        <groupId>com.example.common.starter</groupId>
+        <artifactId>springboot-common-starter</artifactId>
     </parent>
 
     <artifactId>generator-mybatis-common</artifactId>
