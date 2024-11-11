@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0</version>
     </parent>
 
     <artifactId>redis-lettuce</artifactId>
@@ -24,7 +24,7 @@
         <dependency>
             <groupId>com.example.web</groupId>
             <artifactId>springboot-starter-web</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0</version>
         </dependency>
 
         <dependency>

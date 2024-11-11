@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0</version>
     </parent>
 
     <artifactId>dynamic-datasource-mybatis</artifactId>
@@ -22,7 +22,7 @@
         <dependency>
             <groupId>com.example.common</groupId>
             <artifactId>springboot-common</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0</version>
         </dependency>
 
         <dependency>
