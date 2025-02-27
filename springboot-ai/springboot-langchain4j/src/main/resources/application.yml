@@ -1,0 +1,9 @@
+server:
+  port: 9620
+  servlet:
+    context-path: /langChain4j
+spring:
+  application:
+    name: springboot-langChain4j
+  profiles:
+    active: prod
