@@ -4,6 +4,7 @@
     <parent>
         <groupId>com.example.common.starter</groupId>
         <artifactId>springboot-common-starter</artifactId>
+        <version>1.0</version>
     </parent>
 
     <artifactId>generator-mybatis-common</artifactId>
