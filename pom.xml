@@ -30,6 +30,8 @@
         <module>springboot-active7</module>
         <module>springboot-elasticsearch</module>
         <module>springboot-mybatis-plus</module>
+        <module>springboot-common-starter/generator-mybatis-common</module>
+        <module>springboot-ai</module>
     </modules>
 
     <properties>
