@@ -3,4 +3,4 @@ spring:
     ollama:
       base-url: http://localhost:11434
       chat:
-        model: deepseek-r1:32  # 本地部署的大模型
+        model: deepseek-r1:32b  # 本地部署的大模型

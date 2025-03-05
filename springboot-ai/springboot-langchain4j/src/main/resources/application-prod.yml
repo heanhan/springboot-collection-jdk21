@@ -1,12 +1,61 @@
+#服务配置
+server:
+  #端口
+  port: 10005 #9995
+  #服务编码
+  tomcat:
+    uri-encoding: UTF-8
 spring:
-  ai:
-    ollama:
-      base-url: http://localhost:11434
-      chat:
-        model: deepseek-r1:32b
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  cache:
+    type: redis
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 20MB
+      max-request-size: 50MB
 
-langchain4j:
-  ollama:
-    chat-model:
-      base-url: http://localhost:11434
-      model-name: deepseek-r1:32b
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.16.75.105:3306/springboot-ai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: abcd@123456
+  data:
+    redis:
+      host: 172.16.75.105
+      port: 6379
+      password: abcd@123456
+  rabbitmq:
+    host: 172.16.75.106
+    username: root
+    password: 123456
+    port: 5672
+    publisher-confirm-type: correlated #发送消息的异步回调，记录消息是否发送成功
+    publisher-returns: true #开启publish-return功能，消息到达交换机，但是没有到达对列表
+    template:
+      #消息路由失败时的策略, true: 调用ReturnCallback, false：丢弃消息
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: auto #，出现异常时返回nack，消息回滚到mq；没有异常，返回ack
+        retry:
+          enabled: true # 开启消费者失败重试
+          initial-interval: 1000 # 初识的失败等待时长为1秒
+          multiplier: 10 # 失败的等待时长倍数，下次等待时长 = multiplier * last-interval
+          max-attempts: 90000 # 最大重试次数
+          stateless: true # true无状态；false有状态。如果业务中包含事务，这里改为false
+
+#配置大模型的地址信息
+ollama:
+  url: http://localhost:11434
+  modelName: deepseek-r1:32b
+  port: 11434
+
+
