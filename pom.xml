@@ -32,6 +32,7 @@
         <module>springboot-mybatis-plus</module>
         <module>springboot-common-starter/generator-mybatis-common</module>
         <module>springboot-ai</module>
+        <module>springboot-ai/springboot-spring-ai</module>
     </modules>
 
     <properties>
