@@ -1,12 +1,7 @@
-spring:
-  ai:
-    ollama:
-      base-url: http://localhost:11434
-      chat:
-        model: deepseek-r1:32b
-
 langchain4j:
-  ollama:
+  open-ai:
     chat-model:
-      base-url: http://localhost:11434
-      model-name: deepseek-r1:32b
+      base-url: http://localhost:11434/v1
+      api-key: dummy-api-key
+      model-name: qwen3:30b-a3b
+      timeout: 60s

@@ -7,27 +7,32 @@
         <version>1.0</version>
     </parent>
 
-    <groupId>com.example.ai</groupId>
-    <artifactId>springboot-langchain4j</artifactId>
+    <artifactId>springboot-spring-ai</artifactId>
     <packaging>jar</packaging>
 
-    <name>springboot-langchain4j</name>
+    <name>springboot-spring-ai</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-tomcat</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-undertow</artifactId>
         </dependency>
+
 
     </dependencies>
 </project>

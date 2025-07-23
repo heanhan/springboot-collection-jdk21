@@ -13,13 +13,37 @@
     <name>springboot-ai</name>
     <modules>
         <module>springboot-langchain4j</module>
+        <module>springboot-spring-ai</module>
     </modules>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-ai.version>1.0.0</spring-ai.version>
     </properties>
 
     <dependencies>
 
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--spring-ai 实现方式-->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--langchain4j的方式-->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
