@@ -19,6 +19,7 @@
         <module>auto-import-springboot-starter</module>
         <module>mino-springboot-starter</module>
         <module>elasticsearch-springboot-starter</module>
+        <module>generator-mybatis-common</module>
     </modules>
 
     <properties>
