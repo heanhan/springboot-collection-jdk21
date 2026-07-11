@@ -1,0 +1,28 @@
+{
+  "name": "admin-web",
+  "version": "1.0.0",
+  "description": "OAuth2.0 授权中心 - 前端管理平台 (Vue3 + TypeScript + Vite)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "type-check": "vue-tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "element-plus": "^2.7.6",
+    "@element-plus/icons-vue": "^2.3.1",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.31",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@vitejs/plugin-vue": "^5.0.5",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.2",
+    "vue-tsc": "^2.0.24"
+  }
+}

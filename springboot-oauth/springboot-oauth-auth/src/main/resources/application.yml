@@ -1,0 +1,99 @@
+server:
+  port: 9000
+  undertow:
+    # Undertow 线程配置
+    io-threads: 2
+    worker-threads: 32
+    buffer-size: 1024
+    # 是否开启直接分配内存
+    direct-buffers: true
+
+spring:
+  application:
+    name: oauth-auth-service
+  profiles:
+    active: dev
+  # Springfox 3.0.0 兼容配置（Spring Boot 2.6+ 需要切换为 ant_path_matcher）
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    format-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+  # 数据源初始数据
+  sql:
+    init:
+      mode: never
+      schema-locations: classpath:sql/schema.sql
+      data-locations: classpath:sql/data.sql
+
+# ==================== JWT 配置 ====================
+jwt:
+  # 签名密钥（HS256 遗留项，已改用 RS256 非对称签名，此项不再用于签名）
+  secret: ZmQ0ZGI5NjQ0MDQwY2I4MjMxY2Y3ZmI3MjdhN2ZmMjNhODNiNGM5YjQ4ZGY3N2Y2NjM3NmQyMzZlYzM5
+  # 密钥 ID（JWK kid，资源服务器按 kid 匹配公钥）
+  key-id: oauth-auth-rsa-key
+  # RSA 非对称密钥（RS256）。留空则启动时自动生成（仅开发/测试，重启失效）；
+  # 生产环境请配置固定密钥：private-key=Base64(PKCS#8) 私钥，public-key=Base64(X.509) 公钥
+  rsa:
+    private-key:
+    public-key:
+  # Access Token 过期时间（秒），默认 30 分钟
+  access-expire: 1800
+  # Refresh Token 过期时间（秒），默认 7 天
+  refresh-expire: 604800
+  # Token 前缀
+  token-prefix: "Bearer "
+  # 请求头名称
+  header: Authorization
+
+# ==================== 安全配置 ====================
+security:
+  # 白名单 URL（Ant 风格，不需要认证即可访问）
+  ignore:
+    urls:
+      - /auth/login
+      - /auth/register
+      - /auth/captcha
+      - /auth/form-login
+      - /auth/refresh
+      - /auth/logout
+      - /oauth/token
+      - /oauth/token_key
+      - /.well-known/jwks.json
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /swagger-resources/**
+      - /v2/api-docs
+      - /v3/api-docs
+      - /webjars/**
+      - /favicon.ico
+      - /error
+  # 黑名单校验
+  blacklist:
+    enabled: true
+  # 图形验证码（登录）
+  captcha:
+    # 登录时是否开启验证码校验
+    enabled: false
+    # 验证码有效期（秒）
+    expire-seconds: 120
+  # 登录失败限制
+  login:
+    max-fail-count: 5
+    lock-minutes: 30
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    com.example.oauth: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
