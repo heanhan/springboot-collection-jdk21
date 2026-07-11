@@ -1,0 +1,43 @@
+# ==================== 开发环境配置 ====================
+spring:
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.16.75.105:3306/oauth_auth?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: abcd@123456
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+      pool-name: OAuthAuthHikariCP
+
+  # Redis 配置
+  redis:
+    host: 172.16.75.105
+    port: 6379
+    database: 0
+    password: abcd@123456
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+      timeout: 5000ms
+
+# JPA 开发环境额外配置
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+
+  # SQL 脚本初始化
+  # 开发环境每次启动执行 schema.sql 重建表结构并载入 data.sql 种子数据
+  # 脚本位置在 application.yml 的 spring.sql.init 中已声明
+  sql:
+    init:
+      mode: always
+      continue-on-error: false

@@ -12,9 +12,7 @@
     <artifactId>springboot-oauth</artifactId>
     <packaging>pom</packaging>
     <modules>
-        <module>springboot-security</module>
-        <module>springboot-security-1</module>
-        <module>springboot-oauth2-leaning</module>
+        <module>springboot-oauth-auth</module>
     </modules>
 
     <properties>
