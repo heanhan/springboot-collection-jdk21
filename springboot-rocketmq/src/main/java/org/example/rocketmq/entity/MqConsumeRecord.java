@@ -48,7 +48,7 @@ import java.time.LocalDateTime;
  *   `created_time`    DATETIME              COMMENT '创建时间',
  *   `updated_time`    DATETIME              COMMENT '更新时间',
  *   PRIMARY KEY (`id`),
- *   UNIQUE KEY `uk_biz_topic` (`biz_key`, `topic`),
+ *   UNIQUE KEY `uk_biz_topic_group` (`biz_key`, `topic`, `consumer_group`),
  *   KEY `idx_status_retry` (`status`, `next_retry_time`)
  * ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
  * </pre>
@@ -60,8 +60,10 @@ import java.time.LocalDateTime;
 @Table(
         name = "mq_consume_record",
         indexes = {
-                // 幂等核心：同一 Topic 下同一业务键只允许存在一条记录
-                @Index(name = "uk_biz_topic", columnList = "biz_key,topic", unique = true),
+                // 幂等核心：同一 Topic 下、同一消费组内，同一业务键只允许存在一条记录。
+                // 之所以带上 consumer_group：同一条消息可能被多个消费组各消费一次（如 TOPIC_BASIC
+                // 同时被「基础并发组」与「生命周期组」订阅），每个组都应有独立的消费状态与幂等判断。
+                @Index(name = "uk_biz_topic_group", columnList = "biz_key,topic,consumer_group", unique = true),
                 // 重试扫描：按状态 + 下次重试时间快速捞出待重试记录
                 @Index(name = "idx_status_retry", columnList = "status,next_retry_time")
         }

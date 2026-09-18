@@ -1,10 +1,13 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -31,13 +34,33 @@ import org.springframework.stereotype.Service;
 )
 public class DelayConsumer implements RocketMQListener<OrderMessage> {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        long now = System.currentTimeMillis();
-        // 计算实际延迟时长（消费时刻 - 发送时刻）
-        long delayed = now - message.getCreateTime();
-        log.info("[延迟消费] orderId={}, 发送时刻={}, 消费时刻={}, 实际延迟≈{}ms",
-                message.getOrderId(), message.getCreateTime(), now, delayed);
-        // 例如：在此判断订单是否仍未支付，若未支付则执行关单逻辑
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 接收落库 -> 执行业务 -> 成功异步回写 / 失败同步入重试表
+        reliabilityService.consume(RocketMqConstant.TOPIC_DELAY, RocketMqConstant.GROUP_DELAY,
+                null, bizKey, null, body, b -> {
+                    long now = System.currentTimeMillis();
+                    // 计算实际延迟时长（消费时刻 - 发送时刻）
+                    long delayed = now - message.getCreateTime();
+                    log.info("[延迟消费] orderId={}, 发送时刻={}, 消费时刻={}, 实际延迟≈{}ms",
+                            message.getOrderId(), message.getCreateTime(), now, delayed);
+                    // 例如：在此判断订单是否仍未支付，若未支付则执行关单逻辑
+                });
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }

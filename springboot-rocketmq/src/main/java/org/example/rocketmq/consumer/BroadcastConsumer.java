@@ -1,11 +1,14 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.MessageModel;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -40,10 +43,29 @@ import org.springframework.stereotype.Service;
 )
 public class BroadcastConsumer implements RocketMQListener<OrderMessage> {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        // 广播模式：每个消费者实例都会执行到这里
-        log.info("[广播消费] 本实例收到消息: orderId={}, action={}",
-                message.getOrderId(), message.getAction());
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 广播模式下 broker 不重试，本处仍记录消费状态；失败会写入统一重试表由数据库重放
+        reliabilityService.consume(RocketMqConstant.TOPIC_BROADCAST, RocketMqConstant.GROUP_BROADCAST,
+                null, bizKey, null, body, b ->
+                        // 广播模式：每个消费者实例都会执行到这里
+                        log.info("[广播消费] 本实例收到消息: orderId={}, action={}",
+                                message.getOrderId(), message.getAction()));
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }

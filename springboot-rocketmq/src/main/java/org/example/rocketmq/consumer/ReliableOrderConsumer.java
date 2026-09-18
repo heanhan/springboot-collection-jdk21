@@ -28,8 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li>{@code onMessage} 收到消息后，交给 {@link MessageReliabilityService#consume} 统一处理；</li>
  *     <li>服务先用 {@code (bizKey, topic)} 唯一索引把消息<b>落库</b>：插入冲突即重复消息，
  *         已成功则<b>幂等跳过</b>；</li>
- *     <li>执行 {@link #handle} 业务：成功置 SUCCESS，失败<b>不抛异常给 broker</b>（等于向 broker ack），
- *         而是记录为 FAILED 并排期，由 {@code FailedMessageRetryScheduler} 定时<b>重放</b>；</li>
+ *     <li>执行 {@link #handle} 业务：成功异步回写 SUCCESS，失败<b>不抛异常给 broker</b>（等于向 broker ack），
+ *         而是置 FAILED 并把原始报文写入统一重试表(type=CONSUME)，由 {@code MessageRetryScheduler} 定时<b>重放</b>；</li>
  *     <li>重试达上限仍失败 → 置 DEAD（死信），需人工介入。</li>
  * </ol>
  *

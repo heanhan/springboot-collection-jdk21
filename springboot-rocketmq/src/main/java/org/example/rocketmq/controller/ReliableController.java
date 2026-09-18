@@ -1,5 +1,6 @@
 package org.example.rocketmq.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -9,7 +10,8 @@ import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
 import org.example.rocketmq.entity.MqConsumeRecord;
 import org.example.rocketmq.enums.ConsumeStatus;
-import org.example.rocketmq.reliability.FailedMessageRetryScheduler;
+import org.example.rocketmq.reliability.MessageRetryScheduler;
+import org.example.rocketmq.reliability.MessageRecordService;
 import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -52,7 +54,15 @@ public class ReliableController {
     private MessageReliabilityService reliabilityService;
 
     @Resource
-    private FailedMessageRetryScheduler retryScheduler;
+    private MessageRetryScheduler retryScheduler;
+
+    /** 生产消息全生命周期记录服务：发送前落库 PENDING，发送后回写 SUCCESS/FAILED */
+    @Resource
+    private MessageRecordService messageRecordService;
+
+    /** 用于将 OrderMessage 序列化为 JSON 存入 mq_produce_record.body */
+    @Resource
+    private ObjectMapper objectMapper;
 
     /** 导航：列出本控制器所有接口 */
     @GetMapping("/index")
@@ -116,11 +126,11 @@ public class ReliableController {
         return reliabilityService.listRecent();
     }
 
-    /** 按业务幂等键查询单条记录 */
+    /** 按业务幂等键查询单条记录（可靠消息固定为 GROUP_RELIABLE 消费组） */
     @GetMapping("/record")
     public Object record(@RequestParam String bizKey,
                          @RequestParam(defaultValue = RocketMqConstant.TOPIC_RELIABLE) String topic) {
-        MqConsumeRecord record = reliabilityService.findByBizKey(bizKey, topic);
+        MqConsumeRecord record = reliabilityService.findByBizKey(bizKey, topic, RocketMqConstant.GROUP_RELIABLE);
         return record != null ? record : "未找到记录: bizKey=" + bizKey + ", topic=" + topic;
     }
 
@@ -142,7 +152,7 @@ public class ReliableController {
     }
 
     /**
-     * 统一的可靠消息发送：设置 KEYS=orderId 作为幂等键。
+     * 统一的可靠消息发送：设置 KEYS=orderId 作为幂等键，同时落库 mq_produce_record。
      *
      * @param orderId 订单号（作为业务幂等键）
      * @param action  业务动作（NORMAL / FAIL_ONCE / FAIL_ALWAYS）
@@ -154,9 +164,25 @@ public class ReliableController {
         Message<OrderMessage> message = MessageBuilder.withPayload(order)
                 .setHeader(RocketMQHeaders.KEYS, orderId)
                 .build();
-        SendResult result = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_RELIABLE, message);
-        log.info("[可靠消息-发送] orderId={}, action={}, msgId={}, status={}",
-                orderId, action, result.getMsgId(), result.getSendStatus());
+        // 发送前先落库 mq_produce_record，便于后续追踪消费状态
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(order);
+        } catch (Exception e) {
+            body = String.valueOf(order);
+        }
+        Long recordId = messageRecordService.createPending(
+                RocketMqConstant.TOPIC_RELIABLE, null, orderId, body, RocketMqConstant.PRODUCER_GROUP);
+        SendResult result;
+        try {
+            result = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_RELIABLE, message);
+            messageRecordService.markProduceSuccess(recordId, result.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[可靠消息-发送] orderId={}, action={}, msgId={}, status={}, recordId={}",
+                orderId, action, result.getMsgId(), result.getSendStatus(), recordId);
         return result;
     }
 }

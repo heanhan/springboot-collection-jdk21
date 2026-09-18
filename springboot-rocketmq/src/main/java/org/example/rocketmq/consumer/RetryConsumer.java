@@ -1,10 +1,12 @@
 package org.example.rocketmq.consumer;
 
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -46,15 +48,24 @@ public class RetryConsumer implements RocketMQListener<MessageExt> {
     /** 演示用：最大容忍的重试次数，超过则认为无法自动恢复 */
     private static final int MAX_HANDLE_TIMES = 3;
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
     @Override
     public void onMessage(MessageExt messageExt) {
         // 获取已重试次数：0 表示首次消费，1 表示第一次重试，以此类推
         int reconsumeTimes = messageExt.getReconsumeTimes();
         // 手动解析消息体（MessageExt 拿到的是原始字节）
         String body = new String(messageExt.getBody(), StandardCharsets.UTF_8);
-        log.info("[重试消费] 收到消息: msgId={}, 已重试次数={}, body={}",
-                messageExt.getMsgId(), reconsumeTimes, body);
+        // 幂等键：优先用业务 Key（发送时通过 RocketMQHeaders.KEYS 设置为 orderId），无则退化为 msgId
+        String keys = messageExt.getKeys();
+        String bizKey = (keys != null && !keys.isBlank()) ? keys : messageExt.getMsgId();
+        log.info("[重试消费] 收到消息: msgId={}, bizKey={}, 已重试次数={}, body={}",
+                messageExt.getMsgId(), bizKey, reconsumeTimes, body);
 
+        // 接收即落库(CONSUMING)；本示例重试由 broker 接管，故仅记录状态、不写统一重试表
+        reliabilityService.recordConsuming(RocketMqConstant.TOPIC_RETRY, RocketMqConstant.GROUP_RETRY,
+                messageExt.getMsgId(), bizKey, messageExt.getTags(), body);
         try {
             // ==== 模拟业务处理：这里故意抛出异常来触发重试 ====
             // 真实场景可能是：调用远程接口超时、数据库死锁、依赖服务不可用等
@@ -64,13 +75,18 @@ public class RetryConsumer implements RocketMQListener<MessageExt> {
             }
 
             // 达到重试上限：不再抛异常（否则最终进入死信队列），改为落库/告警人工介入
-            // 例如：failedMessageService.saveForManualHandle(body);
             log.warn("[重试消费] 已重试 {} 次仍失败, 转为记录并人工处理, 不再重试. msgId={}, body={}",
                     reconsumeTimes, messageExt.getMsgId(), body);
             // 正常返回 = ack，消息不会再被重投（此处已由业务补偿接管）
+            // 消费记录置为 DEAD（死信），体现「消费失败达上限」
+            reliabilityService.recordDead(RocketMqConstant.TOPIC_RETRY, RocketMqConstant.GROUP_RETRY,
+                    bizKey, null, reconsumeTimes);
         } catch (Exception e) {
             // 关键：把异常继续抛出，starter 才会将其判定为消费失败并触发重试
             log.error("[重试消费] 处理异常, 将触发重试: {}", e.getMessage());
+            // 回写消费记录为 FAILED（携带当前重试次数）
+            reliabilityService.recordFailed(RocketMqConstant.TOPIC_RETRY, RocketMqConstant.GROUP_RETRY,
+                    bizKey, e, reconsumeTimes);
             throw new RuntimeException(e);
         }
     }

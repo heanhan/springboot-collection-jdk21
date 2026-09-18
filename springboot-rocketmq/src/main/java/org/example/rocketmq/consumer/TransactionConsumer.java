@@ -1,10 +1,13 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -31,11 +34,29 @@ import org.springframework.stereotype.Service;
 )
 public class TransactionConsumer implements RocketMQListener<OrderMessage> {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        // 只有事务提交成功的消息才会到达这里
-        log.info("[事务消费] 收到已提交的事务消息: orderId={}, action={}",
-                message.getOrderId(), message.getAction());
-        // 例如：在此为该订单增加积分、发送站内信等（务必保证幂等）
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 只有事务提交成功的消息才会到达这里；接收落库 -> 执行业务 -> 成功异步回写 / 失败同步入重试表
+        reliabilityService.consume(RocketMqConstant.TOPIC_TRANSACTION, RocketMqConstant.GROUP_TRANSACTION,
+                null, bizKey, null, body, b ->
+                        // 例如：在此为该订单增加积分、发送站内信等（务必保证幂等）
+                        log.info("[事务消费] 收到已提交的事务消息: orderId={}, action={}",
+                                message.getOrderId(), message.getAction()));
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }

@@ -1,11 +1,14 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.ConsumeMode;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -37,11 +40,31 @@ import org.springframework.stereotype.Service;
 )
 public class OrderlyConsumer implements RocketMQListener<OrderMessage> {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        // 顺序消费：同一 orderId 的消息会按发送顺序依次进入本方法
-        log.info("[顺序消费] orderId={}, action={}（同一订单严格按序处理）",
-                message.getOrderId(), message.getAction());
-        // 注意：顺序消费中若抛异常，会一直重试当前消息（阻塞后续），需做好幂等与告警
+        // 生产端以 orderId+"-"+action 作为 bizKey，消费端保持一致
+        String bizKey = message.getOrderId() + "-" + message.getAction();
+        String body = toJson(message);
+        // 注意：顺序消费下若业务失败，consume() 会吞掉异常并写入重试表（后续重放可能乱序）；
+        // 若业务对严格有序敏感，可改为抛异常依赖 broker 就地重试（阻塞后续）。
+        reliabilityService.consume(RocketMqConstant.TOPIC_ORDER, RocketMqConstant.GROUP_ORDER,
+                null, bizKey, null, body, b ->
+                        // 顺序消费：同一 orderId 的消息会按发送顺序依次进入本方法
+                        log.info("[顺序消费] orderId={}, action={}（同一订单严格按序处理）",
+                                message.getOrderId(), message.getAction()));
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }
