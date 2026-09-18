@@ -4,6 +4,7 @@ import org.example.rocketmq.entity.MqConsumeRecord;
 import org.example.rocketmq.enums.ConsumeStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,7 +18,7 @@ import java.util.List;
  *
  * @author demo
  */
-public interface MqConsumeRecordRepository extends JpaRepository<MqConsumeRecord, Long> {
+public interface MqConsumeRecordRepository extends JpaRepository<MqConsumeRecord, Long>, JpaSpecificationExecutor<MqConsumeRecord> {
 
     /**
      * 按业务幂等键 + 主题查询记录（唯一）。
