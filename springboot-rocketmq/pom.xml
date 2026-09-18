@@ -70,6 +70,19 @@
             <artifactId>rocketmq-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- JPA：本地消息表（mq_consume_record）持久化，实现失败记录 / 数据库重试 / 幂等去重 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- MySQL 驱动：本地消息表存储，版本由 Spring Boot BOM 统一管理 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- 单元测试（可选，用于集成测试） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
