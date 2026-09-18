@@ -52,7 +52,7 @@ public class MessageRetryScheduler {
      * 周期任务：按 application.yml 中 {@code reliability.retry-scan-interval-millis} 的间隔执行。
      * fixedDelay 表示「上一次执行结束后」再等待该间隔，避免任务重叠。
      */
-    @Scheduled(fixedDelayString = "${reliability.retry-scan-interval-millis:10000}")
+//    @Scheduled(fixedDelayString = "${reliability.retry-scan-interval-millis:10000}")
     public void scheduledRetry() {
         int handled = retryNow();
         if (handled > 0) {

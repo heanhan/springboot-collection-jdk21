@@ -16,6 +16,7 @@ import org.example.rocketmq.repository.MqConsumeRecordRepository;
 import org.example.rocketmq.repository.MqMessageRetryRepository;
 import org.example.rocketmq.repository.MqProduceRecordRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -53,6 +54,16 @@ public class MessageRetryService {
     @Resource
     private MqConsumeRecordRepository consumeRecordRepository;
 
+    /**
+     * 可靠消息处理器注册中心（消费重试时按 topic 反查处理器）。
+     *
+     * <p><b>为何用 {@code @Lazy}</b>：打破启动期循环依赖。Registry 通过构造器收集所有
+     * {@link ReliableMessageHandler}（包含 {@code ReliableOrderConsumer}），而
+     * {@code ReliableOrderConsumer -> MessageReliabilityService -> MessageRetryService -> Registry}
+     * 构成一个环。该依赖仅在<b>重试执行期</b>才用到，注入懒代理后启动期不解析真实 Bean，
+     * 环即被打破；首次调用 {@code get()} 时（调度器运行时，上下文已就绪）再解析。</p>
+     */
+    @Lazy
     @Resource
     private ReliableMessageHandlerRegistry handlerRegistry;
 
