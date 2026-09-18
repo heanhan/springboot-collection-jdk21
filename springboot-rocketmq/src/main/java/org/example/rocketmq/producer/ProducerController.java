@@ -11,6 +11,7 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.apache.rocketmq.spring.support.RocketMQHeaders;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageRecordService;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,6 +53,13 @@ public class ProducerController {
     private ObjectMapper objectMapper;
 
     /**
+     * 生产消息全生命周期记录服务：发送前落库 PENDING，发送后回写 SUCCESS/FAILED。
+     * 消费端接收后凭 (bizKey, topic) 反查同一条记录并回写消费状态。
+     */
+    @Resource
+    private MessageRecordService messageRecordService;
+
+    /**
      * 测试导航页：列出所有生产者接口，方便快速点击测试。
      * 访问：GET /rocketmq-demo/producer/index
      */
@@ -68,6 +76,8 @@ public class ProducerController {
         urls.put("8-带Tag和Key发送", "/rocketmq-demo/producer/tagkey");
         urls.put("附-触发失败重试消费", "/rocketmq-demo/producer/retry");
         urls.put("附-触发广播消费", "/rocketmq-demo/producer/broadcast");
+        urls.put("★-生产消息全链路记录查询", "/rocketmq-demo/message-record/index");
+        urls.put("★-可靠消息(本地消息表)导航", "/rocketmq-demo/reliable/index");
         return urls;
     }
 
@@ -80,10 +90,24 @@ public class ProducerController {
     @GetMapping("/sync")
     public String syncSend() {
         OrderMessage order = OrderMessage.of("SYNC-" + System.currentTimeMillis(), "CREATE");
-        // syncSend：同步发送，返回发送结果（包含 msgId、发送状态、落在哪个队列等）
-        SendResult sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_BASIC, order);
-        log.info("[同步发送] 结果: status={}, msgId={}", sendResult.getSendStatus(), sendResult.getMsgId());
-        return "同步发送成功: " + sendResult.getSendStatus() + ", msgId=" + sendResult.getMsgId();
+        // 统一设置消息 Key = orderId，供消费端反查 mq_produce_record
+        org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                .build();
+        // 发送前先落库 PENDING，发送后回写 SUCCESS/FAILED
+        Long recordId = preRecord(RocketMqConstant.TOPIC_BASIC, null, order.getOrderId(), order);
+        SendResult sendResult;
+        try {
+            sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_BASIC, message);
+            messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[同步发送] 结果: status={}, msgId={}, recordId={}",
+                sendResult.getSendStatus(), sendResult.getMsgId(), recordId);
+        return "同步发送成功: " + sendResult.getSendStatus() + ", msgId=" + sendResult.getMsgId()
+                + ", recordId=" + recordId;
     }
 
     /* ==================================================================
@@ -95,21 +119,29 @@ public class ProducerController {
     @GetMapping("/async")
     public String asyncSend() {
         OrderMessage order = OrderMessage.of("ASYNC-" + System.currentTimeMillis(), "PAY");
-        // asyncSend：异步发送，第三个参数是回调；方法本身会立即返回，不等待 broker 结果
-        rocketMqTemplate.asyncSend(RocketMqConstant.TOPIC_BASIC, order, new SendCallback() {
+        org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                .build();
+        // 异步发送：先落库 PENDING，在回调中回写 SUCCESS/FAILED
+        Long recordId = preRecord(RocketMqConstant.TOPIC_BASIC, null, order.getOrderId(), order);
+        rocketMqTemplate.asyncSend(RocketMqConstant.TOPIC_BASIC, message, new SendCallback() {
             @Override
             public void onSuccess(SendResult sendResult) {
                 // 发送成功回调：在 RocketMQ 客户端的回调线程中执行
-                log.info("[异步发送-成功] msgId={}, status={}", sendResult.getMsgId(), sendResult.getSendStatus());
+                messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+                log.info("[异步发送-成功] msgId={}, status={}, recordId={}",
+                        sendResult.getMsgId(), sendResult.getSendStatus(), recordId);
             }
 
             @Override
             public void onException(Throwable e) {
-                // 发送失败回调：通常在此记录日志、落库补偿或告警
-                log.error("[异步发送-失败] 订单={}, 原因={}", order.getOrderId(), e.getMessage(), e);
+                // 发送失败回调：回写 FAILED，便于后续补偿重发
+                messageRecordService.markProduceFailed(recordId, e);
+                log.error("[异步发送-失败] 订单={}, recordId={}, 原因={}",
+                        order.getOrderId(), recordId, e.getMessage(), e);
             }
         });
-        return "异步发送已提交（结果见控制台回调日志）";
+        return "异步发送已提交（结果见控制台回调日志）, recordId=" + recordId;
     }
 
     /* ==================================================================
@@ -121,10 +153,20 @@ public class ProducerController {
     @GetMapping("/oneway")
     public String onewaySend() {
         OrderMessage order = OrderMessage.of("ONEWAY-" + System.currentTimeMillis(), "LOG");
-        // sendOneWay：单向发送，无返回值，不等待 broker 响应（注意方法名 W 大写）
-        rocketMqTemplate.sendOneWay(RocketMqConstant.TOPIC_BASIC, order);
-        log.info("[单向发送] 已发送，orderId={}", order.getOrderId());
-        return "单向发送完成（无返回结果，见消费者日志）";
+        org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                .build();
+        // 单向发送无返回结果：先落库 PENDING，未抛异常则视为已提交，直接置 SUCCESS（msgId 不可得）
+        Long recordId = preRecord(RocketMqConstant.TOPIC_BASIC, null, order.getOrderId(), order);
+        try {
+            rocketMqTemplate.sendOneWay(RocketMqConstant.TOPIC_BASIC, message);
+            messageRecordService.markProduceSuccess(recordId, null);
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[单向发送] 已发送，orderId={}, recordId={}", order.getOrderId(), recordId);
+        return "单向发送完成（无返回结果，见消费者日志）, recordId=" + recordId;
     }
 
     /* ==================================================================
@@ -142,12 +184,23 @@ public class ProducerController {
         // 延迟发送需使用 Message 重载：syncSend(destination, Message, timeout毫秒, delayLevel)
         // 这里默认 delayLevel=3，即延迟 10 秒后消费者才能收到
         org.springframework.messaging.Message<OrderMessage> message =
-                MessageBuilder.withPayload(order).build();
-        SendResult sendResult = rocketMqTemplate.syncSend(
-                RocketMqConstant.TOPIC_DELAY, message, 3000, delayLevel);
-        log.info("[延迟发送] delayLevel={} (级别3=10s), msgId={}, 发送时刻={}",
-                delayLevel, sendResult.getMsgId(), order.getCreateTime());
-        return "延迟发送成功: delayLevel=" + delayLevel + "（级别3=10秒后消费），msgId=" + sendResult.getMsgId();
+                MessageBuilder.withPayload(order)
+                        .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                        .build();
+        Long recordId = preRecord(RocketMqConstant.TOPIC_DELAY, null, order.getOrderId(), order);
+        SendResult sendResult;
+        try {
+            sendResult = rocketMqTemplate.syncSend(
+                    RocketMqConstant.TOPIC_DELAY, message, 3000, delayLevel);
+            messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[延迟发送] delayLevel={} (级别3=10s), msgId={}, 发送时刻={}, recordId={}",
+                delayLevel, sendResult.getMsgId(), order.getCreateTime(), recordId);
+        return "延迟发送成功: delayLevel=" + delayLevel + "（级别3=10秒后消费），msgId=" + sendResult.getMsgId()
+                + ", recordId=" + recordId;
     }
 
     /* ==================================================================
@@ -166,12 +219,25 @@ public class ProducerController {
         for (String action : actions) {
             OrderMessage order = new OrderMessage(orderId, "user-" + orderId, action,
                     new java.math.BigDecimal("199.00"), System.currentTimeMillis());
-            // syncSendOrderly(destination, payload, hashKey)：以 orderId 作为分区键保证顺序
-            SendResult sendResult = rocketMqTemplate.syncSendOrderly(
-                    RocketMqConstant.TOPIC_ORDER, order, orderId);
+            // 同一 orderId 下不同 action 需要各自幂等，拼接为 bizKey
+            String bizKey = orderId + "-" + action;
+            org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                    .setHeader(RocketMQHeaders.KEYS, bizKey)
+                    .build();
+            Long recordId = preRecord(RocketMqConstant.TOPIC_ORDER, null, bizKey, order);
+            SendResult sendResult;
+            try {
+                // syncSendOrderly(destination, message, hashKey)：以 orderId 作为分区键保证顺序
+                sendResult = rocketMqTemplate.syncSendOrderly(
+                        RocketMqConstant.TOPIC_ORDER, message, orderId);
+                messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+            } catch (RuntimeException e) {
+                messageRecordService.markProduceFailed(recordId, e);
+                throw e;
+            }
             sb.append(action).append("->").append(sendResult.getMessageQueue().getQueueId()).append("; ");
-            log.info("[顺序发送] orderId={}, action={}, 队列={}", orderId, action,
-                    sendResult.getMessageQueue().getQueueId());
+            log.info("[顺序发送] orderId={}, action={}, 队列={}, recordId={}", orderId, action,
+                    sendResult.getMessageQueue().getQueueId(), recordId);
         }
         return "顺序发送成功（同一订单进入同一队列）: " + sb;
     }
@@ -187,19 +253,35 @@ public class ProducerController {
     public String batchSend(@RequestParam(defaultValue = "10") int count) throws Exception {
         // RocketMQTemplate 未直接提供批量 API，这里取出底层 DefaultMQProducer 手动批量发送
         List<Message> messageList = new ArrayList<>();
+        List<Long> recordIds = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             OrderMessage order = OrderMessage.of("BATCH-" + System.currentTimeMillis() + "-" + i, "BATCH");
+            String bizKey = order.getOrderId();
             // 手动将对象序列化为 JSON 字节数组，构建成 RocketMQ 原生 Message
             byte[] body = objectMapper.writeValueAsString(order).getBytes(StandardCharsets.UTF_8);
-            // Message(topic, tags, keys, body)
+            // Message(topic, tags, keys, body)：keys 即 bizKey，消费端凭此反查 mq_produce_record
             Message message = new Message(RocketMqConstant.TOPIC_BATCH, RocketMqConstant.TAG_A,
-                    "batchKey-" + i, body);
+                    bizKey, body);
             messageList.add(message);
+            // 批量发送前逐条落库 PENDING
+            recordIds.add(messageRecordService.createPending(
+                    RocketMqConstant.TOPIC_BATCH, RocketMqConstant.TAG_A, bizKey,
+                    new String(body, StandardCharsets.UTF_8), RocketMqConstant.PRODUCER_GROUP));
         }
-        // 一次性发送整批消息
-        SendResult sendResult = rocketMqTemplate.getProducer().send(messageList);
-        log.info("[批量发送] 共 {} 条, status={}, msgId={}", count, sendResult.getSendStatus(), sendResult.getMsgId());
-        return "批量发送成功: " + count + " 条, msgId=" + sendResult.getMsgId();
+        // 一次性发送整批消息；批量发送只有一个 SendResult，成功则将所有记录置 SUCCESS
+        try {
+            SendResult sendResult = rocketMqTemplate.getProducer().send(messageList);
+            for (Long id : recordIds) {
+                messageRecordService.markProduceSuccess(id, sendResult.getMsgId());
+            }
+            log.info("[批量发送] 共 {} 条, status={}, msgId={}", count, sendResult.getSendStatus(), sendResult.getMsgId());
+            return "批量发送成功: " + count + " 条, msgId=" + sendResult.getMsgId();
+        } catch (Exception e) {
+            for (Long id : recordIds) {
+                messageRecordService.markProduceFailed(id, e);
+            }
+            throw e;
+        }
     }
 
     /* ==================================================================
@@ -223,14 +305,33 @@ public class ProducerController {
                 .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
                 .setHeader("orderId", order.getOrderId())
                 .build();
-        // sendMessageInTransaction(destination, message, arg)：发送事务消息
-        // arg 会作为参数传入 executeLocalTransaction 的第二个参数
-        TransactionSendResult result = rocketMqTemplate.sendMessageInTransaction(
-                RocketMqConstant.TOPIC_TRANSACTION, message, order.getOrderId());
-        log.info("[事务发送] 半消息发送结果: localTxState={}, msgId={}",
-                result.getLocalTransactionState(), result.getMsgId());
+        Long recordId = preRecord(RocketMqConstant.TOPIC_TRANSACTION, null, order.getOrderId(), order);
+        TransactionSendResult result;
+        try {
+            // sendMessageInTransaction(destination, message, arg)：发送事务消息
+            // arg 会作为参数传入 executeLocalTransaction 的第二个参数
+            result = rocketMqTemplate.sendMessageInTransaction(
+                    RocketMqConstant.TOPIC_TRANSACTION, message, order.getOrderId());
+            // 事务消息的「发送成功」不等于「消息可见」，需结合本地事务状态判定：
+            //   COMMIT  -> 本地事务成功、半消息已提交，消费者可见 -> 生产记录置 SUCCESS
+            //   ROLLBACK-> 本地事务失败、半消息被丢弃 -> 生产记录置 FAILED（并入重试表，供人工/自动补偿）
+            //   UNKNOWN -> 结果待定，等待 broker 回查 -> 保持 PENDING，由回查/补偿任务最终确定
+            switch (result.getLocalTransactionState()) {
+                case COMMIT_MESSAGE -> messageRecordService.markProduceSuccess(recordId, result.getMsgId());
+                case ROLLBACK_MESSAGE -> messageRecordService.markProduceFailed(recordId,
+                        new IllegalStateException("事务消息本地事务回滚，半消息被丢弃: orderId=" + order.getOrderId()));
+                default -> log.warn("[事务发送] 本地事务状态未知，保持 PENDING 等待回查. orderId={}, recordId={}",
+                        order.getOrderId(), recordId);
+            }
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[事务发送] 半消息发送结果: localTxState={}, msgId={}, recordId={}",
+                result.getLocalTransactionState(), result.getMsgId(), recordId);
         return "事务消息已发送: localTxState=" + result.getLocalTransactionState()
-                + ", msgId=" + result.getMsgId() + "（本地事务与回查逻辑见 OrderTransactionListener）";
+                + ", msgId=" + result.getMsgId() + ", recordId=" + recordId
+                + "（本地事务与回查逻辑见 OrderTransactionListener）";
     }
 
     /* ==================================================================
@@ -252,16 +353,34 @@ public class ProducerController {
                 .setHeader(RocketMQHeaders.KEYS, orderId) // 设置消息 Key，可在控制台按 Key 查询
                 .build();
         // 发送到 TOPIC_TAG 的 tagA 标签；Tag 过滤消费者只订阅 tagA，因此能收到
-        SendResult tagAResult = rocketMqTemplate.syncSend(
-                RocketMqConstant.TOPIC_TAG + ":" + RocketMqConstant.TAG_A, message);
+        Long recordIdA = preRecord(RocketMqConstant.TOPIC_TAG, RocketMqConstant.TAG_A, orderId, order);
+        SendResult tagAResult;
+        try {
+            tagAResult = rocketMqTemplate.syncSend(
+                    RocketMqConstant.TOPIC_TAG + ":" + RocketMqConstant.TAG_A, message);
+            messageRecordService.markProduceSuccess(recordIdA, tagAResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordIdA, e);
+            throw e;
+        }
 
         // 再发一条 tagB 的消息作对比：Tag 过滤消费者(只订阅 tagA)将收不到这条
+        String bizKeyB = orderId + "-B";
+        OrderMessage orderB = OrderMessage.of(bizKeyB, "TAG_TEST_B");
         org.springframework.messaging.Message<OrderMessage> messageB = MessageBuilder
-                .withPayload(OrderMessage.of(orderId + "-B", "TAG_TEST_B"))
-                .setHeader(RocketMQHeaders.KEYS, orderId + "-B")
+                .withPayload(orderB)
+                .setHeader(RocketMQHeaders.KEYS, bizKeyB)
                 .build();
-        SendResult tagBResult = rocketMqTemplate.syncSend(
-                RocketMqConstant.TOPIC_TAG + ":" + RocketMqConstant.TAG_B, messageB);
+        Long recordIdB = preRecord(RocketMqConstant.TOPIC_TAG, RocketMqConstant.TAG_B, bizKeyB, orderB);
+        SendResult tagBResult;
+        try {
+            tagBResult = rocketMqTemplate.syncSend(
+                    RocketMqConstant.TOPIC_TAG + ":" + RocketMqConstant.TAG_B, messageB);
+            messageRecordService.markProduceSuccess(recordIdB, tagBResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordIdB, e);
+            throw e;
+        }
 
         log.info("[Tag&Key发送] tagA msgId={}, tagB msgId={}", tagAResult.getMsgId(), tagBResult.getMsgId());
         return "已发送 tagA(消费者可收到) 与 tagB(被过滤，收不到)；可在 Dashboard 按 Key=" + orderId + " 查询";
@@ -274,9 +393,20 @@ public class ProducerController {
     @GetMapping("/retry")
     public String retrySend() {
         OrderMessage order = OrderMessage.of("RETRY-" + System.currentTimeMillis(), "RETRY_TEST");
-        SendResult sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_RETRY, order);
-        log.info("[重试演示-发送] msgId={}", sendResult.getMsgId());
-        return "已发送到重试 Topic，观察 RetryConsumer 的重试日志（默认最多重试 16 次）";
+        org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                .build();
+        Long recordId = preRecord(RocketMqConstant.TOPIC_RETRY, null, order.getOrderId(), order);
+        SendResult sendResult;
+        try {
+            sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_RETRY, message);
+            messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[重试演示-发送] msgId={}, recordId={}", sendResult.getMsgId(), recordId);
+        return "已发送到重试 Topic，观察 RetryConsumer 的重试日志（默认最多重试 16 次）, recordId=" + recordId;
     }
 
     /* ==================================================================
@@ -286,8 +416,36 @@ public class ProducerController {
     @GetMapping("/broadcast")
     public String broadcastSend() {
         OrderMessage order = OrderMessage.of("BC-" + System.currentTimeMillis(), "BROADCAST");
-        SendResult sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_BROADCAST, order);
-        log.info("[广播演示-发送] msgId={}", sendResult.getMsgId());
-        return "已发送到广播 Topic，广播模式下每个消费者实例都会收到该消息";
+        org.springframework.messaging.Message<OrderMessage> message = MessageBuilder.withPayload(order)
+                .setHeader(RocketMQHeaders.KEYS, order.getOrderId())
+                .build();
+        Long recordId = preRecord(RocketMqConstant.TOPIC_BROADCAST, null, order.getOrderId(), order);
+        SendResult sendResult;
+        try {
+            sendResult = rocketMqTemplate.syncSend(RocketMqConstant.TOPIC_BROADCAST, message);
+            messageRecordService.markProduceSuccess(recordId, sendResult.getMsgId());
+        } catch (RuntimeException e) {
+            messageRecordService.markProduceFailed(recordId, e);
+            throw e;
+        }
+        log.info("[广播演示-发送] msgId={}, recordId={}", sendResult.getMsgId(), recordId);
+        return "已发送到广播 Topic，广播模式下每个消费者实例都会收到该消息, recordId=" + recordId;
+    }
+
+    /* ==================================================================
+     * 内部工具：发送前统一落库 PENDING
+     * ------------------------------------------------------------------
+     * 把消息体序列化为 JSON，调用 MessageRecordService.createPending 写入 mq_produce_record，
+     * 返回记录 ID。后续发送成功/失败时凭此 ID 回写状态。
+     * ================================================================== */
+    private Long preRecord(String topic, String tags, String bizKey, Object payload) {
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            // 序列化失败不应影响发送，降级为 toString
+            body = String.valueOf(payload);
+        }
+        return messageRecordService.createPending(topic, tags, bizKey, body, RocketMqConstant.PRODUCER_GROUP);
     }
 }

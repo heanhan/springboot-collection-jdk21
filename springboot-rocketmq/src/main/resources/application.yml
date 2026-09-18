@@ -13,8 +13,8 @@ spring:
   application:
     name: springboot-rocketmq
 
-  # ================== 数据源（本地消息表 mq_consume_record） ==================
-  # 用于消息落库：幂等去重、失败记录、数据库重试。createDatabaseIfNotExist=true 会自动建库。
+  # ================== 数据源（三张表：生产 mq_produce_record / 消费 mq_consume_record / 重试 mq_message_retry） ==================
+  # 用于消息落库：生产端发送记录、消费端幂等去重与状态、失败消息统一重试。createDatabaseIfNotExist=true 会自动建库。
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://172.16.75.105:3306/springboot-rocketmq?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
@@ -24,7 +24,7 @@ spring:
   # ================== JPA / Hibernate ==================
   jpa:
     hibernate:
-      # 首次启动自动建表（mq_consume_record）；生产环境建议改为 validate 并用 DDL 脚本管理
+      # 首次启动自动建表（mq_produce_record、mq_consume_record、mq_message_retry）；生产环境建议改为 validate 并用 DDL 脚本管理
       ddl-auto: update
       naming:
         physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
@@ -39,10 +39,20 @@ reliability:
   max-retry: 3
   # 重试基础间隔（秒），采用递增退避：第 n 次重试延迟 = base-retry-interval * n
   base-retry-interval-seconds: 10
-  # 失败消息扫描调度间隔（毫秒），定时从数据库捞出到期的失败消息重试
+  # 失败消息扫描调度间隔（毫秒），定时从统一重试表 mq_message_retry 捞出到期消息重试
   retry-scan-interval-millis: 10000
   # 每次扫描最多处理条数，避免单次任务过重
   retry-batch-size: 50
+  # ---------- 异步落库线程池（JUC）：把「发送/消费成功」的状态回写从主链路剥离，提升吞吐 ----------
+  async:
+    # 核心线程数
+    core-pool-size: 4
+    # 最大线程数
+    max-pool-size: 8
+    # 有界队列容量：防止任务无限堆积导致 OOM；队列满时由 CallerRunsPolicy 形成背压
+    queue-capacity: 2000
+    # 非核心线程空闲存活时间（秒）
+    keep-alive-seconds: 60
 
 # ========================= RocketMQ 核心配置 =========================
 rocketmq:

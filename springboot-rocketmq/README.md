@@ -4,6 +4,8 @@
 
 - **生产者场景**：同步、异步（带回调）、单向、延迟、顺序、批量、事务、带 Tag&Key 发送
 - **消费者场景**：并发消费、顺序消费、广播消费、Tag 过滤、失败重试、延迟消费、批量消费、事务消费、生命周期定制（位点/ack 控制）
+- **消息可靠性落库（三表分离）**：生产端发送前落库 `mq_produce_record`（PENDING→SUCCESS/FAILED），消费端接收落库 `mq_consume_record`（CONSUMING→SUCCESS/FAILED/DEAD，按消费组幂等）；**生产失败与消费失败连同原始报文统一落入重试表 `mq_message_retry`**（用 `retry_type` 区分 PRODUCE/CONSUME），由定时调度器「取原始数据」重新生产 / 重新消费
+- **JUC 异步落库**：发送/消费**成功**的状态回写走独立线程池异步执行（有界队列 + `CallerRunsPolicy` 背压 + 优雅停机），主链路不阻塞；**失败入重试表**等关键路径同步执行，绝不丢
 
 ---
 
@@ -49,23 +51,35 @@ springboot-rocketmq/
     │   │   ├── RocketMqConstant.java           # 统一常量：Topic / Group / Tag
     │   │   └── OrderMessage.java               # 统一消息体（订单示例）
     │   ├── producer/
-    │   │   └── ProducerController.java         # 8+2 个发送场景，每个独立 HTTP 接口
+    │   │   └── ProducerController.java         # 8+2 个发送场景，每个独立 HTTP 接口（发送前落库、成功异步回写、失败入重试表）
     │   ├── controller/
-    │   │   └── ReliableController.java         # 可靠消息演示接口（发送/重复/失败/查询/手动重试）
+    │   │   ├── ReliableController.java         # 可靠消息演示接口（发送/重复/失败/查询/手动重试）
+    │   │   └── MessageRecordController.java    # ★ 生产记录 + 统一重试表查询接口
     │   ├── transaction/
     │   │   └── OrderTransactionListener.java   # 事务消息：本地事务执行 + 状态回查
+    │   ├── concurrent/
+    │   │   └── AsyncRecordExecutor.java        # ★ JUC 异步落库线程池（成功状态回写异步化）
     │   ├── entity/
-    │   │   └── MqConsumeRecord.java            # 本地消息表实体（幂等/失败/重试）
+    │   │   ├── MqProduceRecord.java            # ★ 生产端消息表（仅生产状态）
+    │   │   ├── MqConsumeRecord.java            # 消费端消息表（幂等/消费状态，按组唯一）
+    │   │   └── MqMessageRetry.java             # ★ 统一重试表（retry_type 区分生产/消费失败 + 原始报文）
     │   ├── enums/
-    │   │   └── ConsumeStatus.java              # 消费状态：CONSUMING/SUCCESS/FAILED/DEAD
+    │   │   ├── ProduceStatus.java              # 生产状态：PENDING/SUCCESS/FAILED
+    │   │   ├── ConsumeStatus.java              # 消费状态：CONSUMING/SUCCESS/FAILED/DEAD
+    │   │   ├── RetryType.java                  # ★ 重试类型：PRODUCE/CONSUME
+    │   │   └── RetryStatus.java                # ★ 重试状态：PENDING/RETRYING/SUCCESS/DEAD
     │   ├── repository/
-    │   │   └── MqConsumeRecordRepository.java  # 本地消息表 JPA 仓储
-    │   ├── reliability/                        # ★ 消息可靠性框架（本地消息表模式）
+    │   │   ├── MqProduceRecordRepository.java  # 生产消息表 JPA 仓储
+    │   │   ├── MqConsumeRecordRepository.java  # 消费消息表 JPA 仓储
+    │   │   └── MqMessageRetryRepository.java   # ★ 统一重试表 JPA 仓储（含乐观抢占 compareAndSetStatus）
+    │   ├── reliability/                        # ★ 消息可靠性框架（三表分离 + 统一重试）
     │   │   ├── MessageCallback.java            # 业务回调接口
     │   │   ├── ReliableMessageHandler.java     # 重放处理器接口（按 topic 反查）
     │   │   ├── ReliableMessageHandlerRegistry.java # 处理器注册中心
-    │   │   ├── MessageReliabilityService.java  # 核心：落库+幂等+失败记录+重试
-    │   │   └── FailedMessageRetryScheduler.java# 定时扫描失败消息并重试
+    │   │   ├── MessageRecordService.java       # ★ 生产端：发送前落库 + 成功异步回写 + 失败同步入重试表
+    │   │   ├── MessageReliabilityService.java  # ★ 消费端：接收落库 + 幂等 + 成功异步回写 + 失败同步入重试表
+    │   │   ├── MessageRetryService.java        # ★ 统一重试：落重试表 + 生产重发 + 消费重放
+    │   │   └── MessageRetryScheduler.java      # ★ 定时扫描 mq_message_retry（乐观抢占）并重试
     │   └── consumer/
     │       ├── BasicConcurrentConsumer.java    # ① 并发消费（Push + 集群）
     │       ├── OrderlyConsumer.java            # ② 顺序消费（ORDERLY）
@@ -107,7 +121,7 @@ rocketmq:
 
 ```yaml
 spring:
-  datasource:                                   # 本地消息表 mq_consume_record 的存储
+  datasource:                                   # 三张表（mq_produce_record / mq_consume_record / mq_message_retry）的存储
     url: jdbc:mysql://172.16.75.105:3306/springboot-rocketmq?...&createDatabaseIfNotExist=true
     username: root
     password: abcd@123456
@@ -118,8 +132,13 @@ spring:
 reliability:
   max-retry: 3                                  # 最大重试次数，达到后转死信(DEAD)
   base-retry-interval-seconds: 10               # 递增退避：第 n 次重试延迟 = 10 * n 秒
-  retry-scan-interval-millis: 10000             # 失败消息扫描间隔
+  retry-scan-interval-millis: 10000             # 统一重试表扫描间隔
   retry-batch-size: 50                          # 每轮扫描最多处理条数
+  async:                                        # ★ JUC 异步落库线程池（成功状态回写异步化）
+    core-pool-size: 4                           # 核心线程数
+    max-pool-size: 8                            # 最大线程数
+    queue-capacity: 2000                        # 有界队列容量（防 OOM，满时 CallerRunsPolicy 背压）
+    keep-alive-seconds: 60                       # 非核心线程空闲存活时间
 ```
 
 > **启动前置条件**：本模块已引入 MySQL（本地消息表），启动前需确保 `172.16.75.105:3306` 可连；库 `springboot-rocketmq` 会由 `createDatabaseIfNotExist=true` 自动创建，表由 `ddl-auto=update` 自动生成。
@@ -200,7 +219,7 @@ http://localhost:11001/rocketmq-demo/producer/index
 | BatchConsumer | 默认 | 批量仅是生产端优化，消费端仍逐条回调 |
 | TransactionConsumer | 默认 | 只接收已提交的事务消息 |
 | LifecycleManualAckConsumer | 实现 `RocketMQPushConsumerLifecycleListener` | 定制线程数/重试次数，演示位点控制 |
-| ReliableOrderConsumer | 默认 + 集成 `MessageReliabilityService` | ⑩ 消息落库、幂等去重、失败记录、数据库重试（见第八节） |
+| ReliableOrderConsumer | 默认 + 集成 `MessageReliabilityService` | ⑩ 消息落库、幂等去重、失败入重试表、数据库重试（见第九节） |
 
 ### 关于「手动确认 / 提交位点」
 
@@ -219,47 +238,148 @@ starter 的 Push 消费模型采用**自动位点管理**：
 
 ---
 
-## 八、消息可靠性设计（本地消息表：持久化 / 失败记录 / 数据库重试 / 幂等）
+## 八、生产端可靠发送（mq_produce_record：发送前落库 + 成功异步回写 + 失败入重试表）
 
-本节是本模块的**重点进阶内容**，演示生产级「消息可靠消费」的完整设计。相比 broker 自带重试（`RetryConsumer`），本方案把消息**落库 MySQL**，重试策略完全可控、过程可查、可人工干预。
+本节对应需求①：**消息生产入库——发送前落库；发送成功后更新生产状态；发送失败落入独立重试表（保存原始报文），供后续「直接取原始数据进行生产重试请求（重新发送）」**。
 
-### 8.1 设计目标
+### 8.1 总体架构（三表分离 + 统一重试）
 
-| 诉求 | 实现方式 |
-| --- | --- |
-| 消息持久化到 MySQL | 每条消费的消息落库到 `mq_consume_record` 表 |
-| 防止重复消费（幂等） | `(biz_key, topic)` 唯一索引 + 状态判断，重复投递自动跳过 |
-| 失败记录 | 消费失败保存 `status=FAILED`、`error_msg`、`retry_count`、`next_retry_time` |
-| 从数据库重试 | `@Scheduled` 定时扫描到期失败记录，反查处理器**重放**业务 |
-| 死信兜底 | 重试达 `max-retry` 仍失败 → `status=DEAD`，停止自动重试 |
+| 表 | 职责 | 关键字段 |
+| --- | --- | --- |
+| `mq_produce_record` | **生产端**：一条被生产的消息的发送生命周期 | `produce_status`(PENDING/SUCCESS/FAILED)、`body`(原始报文) |
+| `mq_consume_record` | **消费端**：一次消费的幂等与状态（见第九节） | `status`(CONSUMING/SUCCESS/FAILED/DEAD)、`consumer_group` |
+| `mq_message_retry` | **统一重试**：生产失败 + 消费失败 | `retry_type`(PRODUCE/CONSUME)、`status`(PENDING/RETRYING/SUCCESS/DEAD)、`body`、`next_retry_time` |
 
-### 8.2 状态流转
+三表通过 `(bizKey, topic)` 关联；重试表用 `source_record_id` 回指来源业务记录，便于回溯。
+
+> **为什么重试独立成表**：① 与业务记录表解耦，重试调度只扫描这张「小表」，索引 `(retry_type,status,next_retry_time)` 命中快；② 用 `retry_type` 一张表**区分「生产者失败消息」与「消费者失败消息」**，统一退避与死信处理；③ 保存原始报文，重试无需回查业务表，可直接重放。
+
+### 8.2 同步 / 异步边界（不影响性能，JUC 多线程）
+
+| 操作 | 方式 | 原因 |
+| --- | --- | --- |
+| 发送前落库 PENDING | **同步** | 先落库再发送，宕机也有据可查 |
+| 发送成功回写 SUCCESS | **异步**（`AsyncRecordExecutor` JUC 线程池） | 主发送链路不等待 DB 写，提升吞吐；偶发丢失可由补偿修正 |
+| 发送失败置 FAILED + 入重试表 | **同步** | 关乎可靠性，绝不能丢 |
+
+`AsyncRecordExecutor` 采用 `ThreadPoolExecutor` + **有界队列** `ArrayBlockingQueue`（防 OOM）+ **`CallerRunsPolicy`**（队列满时由调用线程执行，形成天然背压）+ 命名守护线程工厂 + `@PreDestroy` **优雅停机**（等待在途任务完成）。
+
+### 8.3 生产端状态流转
 
 ```
-CONSUMING（首次落库）
-   ├─ 业务成功 ─────────────────▶ SUCCESS（终态；重复投递凭此幂等跳过）
-   └─ 业务失败 ─▶ FAILED（retry_count+1，next_retry_time = now + 10*n 秒）
-                     ├─ 定时任务重试成功 ─▶ SUCCESS
-                     └─ retry_count ≥ max-retry ─▶ DEAD（死信，人工处理）
+PENDING（发送前同步落库）
+   ├─ broker SEND_OK ─▶ SUCCESS（异步回填 msgId、produce_time）
+   └─ 发送异常 ──────▶ FAILED（同步；同时写 mq_message_retry[type=PRODUCE]，保存 body）
+                          └─ 调度器取 body 用原生 Producer 重新发送（保留 KEYS=bizKey）
+                                ├─ 重发成功 ─▶ 重试记录 SUCCESS + 回写生产记录 SUCCESS
+                                └─ 达 max-retry 仍失败 ─▶ 重试记录 DEAD（人工处理）
 ```
 
-### 8.3 关键设计：为什么失败时「不抛异常给 broker」
+### 8.4 事务消息的状态处理
 
-若消费方法抛异常，broker 也会重试，就会与数据库重试形成**双重重试**。因此 `ReliableOrderConsumer.onMessage` 内部**吞掉业务异常并正常返回**（等于向 broker ack），失败改由本地消息表接管重试，保证 broker 侧只投递一次、重试次数与间隔完全由 `reliability.*` 配置决定。
+`/producer/transaction` 发送后，按 `TransactionSendResult.getLocalTransactionState()` 判定生产记录状态：
+`COMMIT`→置 SUCCESS；`ROLLBACK`→置 FAILED 并入重试表（半消息被丢弃）；`UNKNOWN`→保持 PENDING，等待 broker 回查 / 补偿任务最终确定。
 
-### 8.4 核心组件
+### 8.5 核心组件
 
 | 组件 | 职责 |
 | --- | --- |
-| `MqConsumeRecord` | 本地消息表实体，含唯一索引与重试字段 |
-| `ConsumeStatus` | 状态枚举 CONSUMING/SUCCESS/FAILED/DEAD |
-| `MessageReliabilityService` | 核心：幂等落库 → 执行业务 → 记录成功/失败/排期 |
-| `ReliableMessageHandler` + `Registry` | 按 topic 注册业务处理器，供重试时反查重放 |
-| `FailedMessageRetryScheduler` | `@Scheduled` 定时扫描到期失败记录并重试 |
-| `ReliableOrderConsumer` | 集成上述能力的示例消费者 |
-| `ReliableController` | 触发各场景 + 查询记录 + 手动重试 |
+| `MessageRecordService` | 生产端核心：`createPending`(同步) / `markProduceSuccess`(异步) / `markProduceFailed`(同步 + 入重试表) |
+| `AsyncRecordExecutor` | JUC 异步落库线程池，承载「成功状态回写」 |
+| `MqProduceRecord` / `MqProduceRecordRepository` | 生产表实体与仓储（仅生产状态，`(bizKey,topic)` 唯一） |
+| `MessageRecordController` | 生产记录 + 统一重试表查询接口 |
 
-### 8.5 可靠消息接口与体验顺序
+### 8.6 查询接口
+
+前缀 `http://localhost:11001/rocketmq-demo`，导航页 `/message-record/index`。
+
+| 接口 | 现象 |
+| --- | --- |
+| `/message-record/records` | 最近 100 条生产记录 |
+| `/message-record/records-by-topic?topic=demo-basic-topic` | 按 Topic 查询 |
+| `/message-record/produce-stats` | 生产状态统计（观察 PENDING/FAILED 堆积） |
+| `/message-record/retry-records?type=PRODUCE` | 生产失败重试记录 |
+| `/message-record/retry-stats` | 重试表按「类型 + 状态」统计 |
+| `/message-record/stats` | 生产 + 重试状态总览 |
+
+### 8.7 建表 DDL（参考，默认由 `ddl-auto=update` 自动创建）
+
+```sql
+CREATE TABLE `mq_produce_record` (
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT,
+  `biz_key`          VARCHAR(128) NOT NULL COMMENT '业务幂等键（消息 Key）',
+  `topic`            VARCHAR(128) NOT NULL COMMENT '消息主题',
+  `tags`             VARCHAR(64)           COMMENT '消息标签',
+  `body`             TEXT                  COMMENT '消息体(JSON)，生产重试时直接取此重发',
+  `producer_group`   VARCHAR(128)          COMMENT '生产者组',
+  `msg_id`           VARCHAR(128)          COMMENT 'RocketMQ msgId（发送成功后回填）',
+  `produce_status`   VARCHAR(16)  NOT NULL COMMENT 'PENDING/SUCCESS/FAILED',
+  `produce_time`     DATETIME              COMMENT '发送完成时间',
+  `produce_error`    VARCHAR(1000)         COMMENT '发送失败原因',
+  `created_time`     DATETIME,
+  `updated_time`     DATETIME,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_biz_topic` (`biz_key`, `topic`),
+  KEY `idx_produce_status` (`produce_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+### 8.8 生产环境注意事项
+
+- **幂等键**：生产者务必用 `RocketMQHeaders.KEYS` 设置业务唯一键；生产重试重发时会原样带回 `KEYS=bizKey`，保证消费端幂等键一致。
+- **补偿重发**：可新增定时任务扫描 `produce_status=PENDING` 且 `created_time` 过久的记录重新发送，应对「落库后、发送前宕机」。
+- **表膨胀**：`mq_produce_record` / `mq_message_retry` 会持续增长，生产环境应定期归档/清理终态记录。
+
+---
+
+## 九、消费端可靠消费（mq_consume_record：接收落库 + 幂等 + 失败入重试表）与统一重试调度
+
+本节对应需求②③：**消费时接收消息即落库；消费成功/失败更新消费状态；消费失败连同原始报文录入统一重试表(type=CONSUME)，供后续「取原始数据进行消费重试」**。
+
+### 9.1 设计目标
+
+| 诉求 | 实现方式 |
+| --- | --- |
+| 消息持久化到 MySQL | 每条消费的消息**接收即落库** `mq_consume_record`(CONSUMING) |
+| 防止重复消费（幂等） | `(biz_key, topic, consumer_group)` 唯一索引 + 状态判断，本组重复投递自动跳过 |
+| 消费成功/失败更新状态 | 成功→**异步**回写 SUCCESS；失败→**同步**置 FAILED |
+| 消费失败入重试表 | 失败时把原始报文写入 `mq_message_retry`(type=CONSUME) |
+| 从数据库重试 | `MessageRetryScheduler` 扫描到期记录，按 topic 反查处理器**重放**业务 |
+| 死信兜底 | 重试达 `max-retry` 仍失败 → 重试记录 DEAD、消费记录 DEAD |
+
+### 9.2 状态流转
+
+```
+消费记录(mq_consume_record)：
+CONSUMING（接收即同步落库）
+   ├─ 业务成功 ─▶ SUCCESS（异步回写；重复投递凭此幂等跳过）
+   └─ 业务失败 ─▶ FAILED（同步）+ 写 mq_message_retry[type=CONSUME]
+                     ├─ 调度器重放成功 ─▶ 消费记录回写 SUCCESS
+                     └─ 达 max-retry ─▶ 消费记录 DEAD
+
+重试记录(mq_message_retry)：
+PENDING ─(调度器乐观抢占)─▶ RETRYING ─成功─▶ SUCCESS
+                                   └─失败─▶ retry_count+1；未达上限回 PENDING（递增退避），达上限 DEAD
+```
+
+### 9.3 关键设计
+
+- **失败不抛异常给 broker**：`consume()` 内部吞掉业务异常（等于 ack），改由数据库重试接管，避免 broker 重试与数据库重试双重触发。（broker 原生重试演示见 `RetryConsumer`，它只记录状态、不入重试表。）
+- **同步/异步边界**：接收落库（同步，幂等前置）、失败入重试表（同步）、成功回写（异步，JUC 线程池）。
+- **消费重放需注册处理器**：`MessageRetryService.retryConsume` 按 topic 反查 `ReliableMessageHandler`；`ReliableOrderConsumer` 已实现该接口(TOPIC_RELIABLE)，故其失败可端到端自动重放。其它 topic 若无处理器，重试记录保持 PENDING 并告警（生产环境应为该 topic 注册处理器）。
+- **多消费组幂等**：唯一键含 `consumer_group`，故 `TOPIC_BASIC` 被两个组消费时各自独立落库、互不冲突。
+
+### 9.4 核心组件
+
+| 组件 | 职责 |
+| --- | --- |
+| `MessageReliabilityService` | 消费端核心：`consume()` 幂等落库→业务→成功异步/失败同步入重试表；`recordConsuming/Success/Failed/Dead` 轻量记录（供 broker 重试演示） |
+| `MessageRetryService` | 统一重试：`saveProduceRetry/saveConsumeRetry` 落表；`executeRetry` 按类型分发；`retryProduce` 原生重发 / `retryConsume` 反查处理器重放；递增退避 + 死信 |
+| `MessageRetryScheduler` | `@Scheduled` 扫描 `mq_message_retry` 到期 PENDING，乐观抢占(`compareAndSetStatus` PENDING→RETRYING)后执行重试；多实例并发安全 |
+| `ReliableMessageHandler` + `Registry` | 按 topic 注册业务处理器，供消费重试反查重放 |
+| `ReliableOrderConsumer` / `ReliableController` | 端到端可靠消费示例 + 触发/查询/手动重试接口 |
+
+### 9.5 可靠消息接口与体验顺序
 
 前缀 `http://localhost:11001/rocketmq-demo`，导航页 `/reliable/index`。
 
@@ -267,14 +387,14 @@ CONSUMING（首次落库）
 | --- | --- | --- |
 | 1 | `/reliable/send?orderId=REL-1001&action=NORMAL` | 正常消费，`/reliable/records` 出现 `SUCCESS` |
 | 2 | `/reliable/send-duplicate?orderId=REL-DUP-1` | 同 orderId 发两次，第二次日志「幂等跳过」，DB 仅 1 条 |
-| 3 | `/reliable/fail-once?orderId=REL-FO-1` | 首次失败落库 `FAILED`，定时任务/`/reliable/retry-now` 后变 `SUCCESS` |
-| 4 | `/reliable/fail-always?orderId=REL-FA-1` | 多次 `/reliable/retry-now` 后 `retry_count` 达上限 → `DEAD` |
-| — | `/reliable/records` | 查询最近 100 条消费记录（状态/重试次数/错误/下次重试时间） |
+| 3 | `/reliable/fail-once?orderId=REL-FO-1` | 首次失败落库 `FAILED` + 入重试表；定时任务/`/reliable/retry-now` 重放后变 `SUCCESS` |
+| 4 | `/reliable/fail-always?orderId=REL-FA-1` | 多次 `/reliable/retry-now` 后重试记录 `retry_count` 达上限 → `DEAD` |
+| — | `/reliable/records` | 查询最近 100 条消费记录（状态/重试次数/错误） |
 | — | `/reliable/record?bizKey=REL-1001` | 按业务键查询单条 |
 | — | `/reliable/stats` | 各状态数量统计，观察 FAILED/DEAD 堆积 |
-| — | `/reliable/retry-now` | 手动触发一轮数据库重试（等价定时任务立即执行） |
+| — | `/reliable/retry-now` | 手动触发一轮重试（扫 `mq_message_retry`，等价定时任务立即执行） |
 
-### 8.6 建表 DDL（参考，默认由 `ddl-auto=update` 自动创建）
+### 9.6 建表 DDL（参考，默认由 `ddl-auto=update` 自动创建）
 
 ```sql
 CREATE TABLE `mq_consume_record` (
@@ -293,21 +413,44 @@ CREATE TABLE `mq_consume_record` (
   `created_time`    DATETIME,
   `updated_time`    DATETIME,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_biz_topic` (`biz_key`, `topic`),
+  UNIQUE KEY `uk_biz_topic_group` (`biz_key`, `topic`, `consumer_group`),
   KEY `idx_status_retry` (`status`, `next_retry_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `mq_message_retry` (
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT,
+  `retry_type`       VARCHAR(16)  NOT NULL COMMENT 'PRODUCE/CONSUME',
+  `biz_key`          VARCHAR(128) NOT NULL COMMENT '业务幂等键',
+  `topic`            VARCHAR(128) NOT NULL COMMENT '消息主题',
+  `tags`             VARCHAR(64)           COMMENT '消息标签',
+  `msg_id`           VARCHAR(128)          COMMENT 'RocketMQ msgId（消费重试时有值）',
+  `group_name`       VARCHAR(128)          COMMENT '生产者组或消费者组',
+  `body`             TEXT                  COMMENT '原始消息体(JSON)，重试直接取此重放',
+  `status`           VARCHAR(16)  NOT NULL COMMENT 'PENDING/RETRYING/SUCCESS/DEAD',
+  `retry_count`      INT          NOT NULL DEFAULT 0,
+  `max_retry`        INT          NOT NULL DEFAULT 3,
+  `next_retry_time`  DATETIME              COMMENT '下次重试时间',
+  `error_msg`        VARCHAR(1000)         COMMENT '最后一次失败原因',
+  `source_record_id` BIGINT                COMMENT '来源记录ID（mq_produce_record/mq_consume_record 主键）',
+  `created_time`     DATETIME,
+  `updated_time`     DATETIME,
+  PRIMARY KEY (`id`),
+  KEY `idx_type_status_retry` (`retry_type`, `status`, `next_retry_time`),
+  KEY `idx_biz_topic` (`biz_key`, `topic`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 8.7 生产环境注意事项
+### 9.7 生产环境注意事项
 
 - **幂等键**：务必让生产者用 `RocketMQHeaders.KEYS` 设置业务唯一键（本 Demo 用 orderId），否则退化为 msgId 无法跨重投去重。
-- **多实例并发重试**：调度器在多实例下会并发扫描，需加分布式锁或用「乐观抢占」（`update ... set status=RETRYING where id=? and status=FAILED`）避免重复重试。本 Demo 为单实例，未加锁。
-- **业务幂等**：数据库重试会重复调用业务逻辑，业务本身仍需保证幂等。
-- **表膨胀**：`mq_consume_record` 会持续增长，生产环境应定期归档/清理终态（SUCCESS/DEAD）记录。
+- **多实例并发重试**：调度器已用「乐观抢占」`compareAndSetStatus(PENDING→RETRYING)`，只有抢占成功的实例才重试，天然支持集群部署，无需额外分布式锁。
+- **业务幂等**：重试会重复调用业务逻辑，业务本身仍需保证幂等。
+- **索引迁移（重要）**：`mq_consume_record` 唯一键由 `(bizKey,topic)` 升级为 `(bizKey,topic,consumerGroup)`。`ddl-auto=update` 只会**新增** `uk_biz_topic_group`，**不会自动删除**旧的 `uk_biz_topic`；若数据库已存在旧唯一索引，需手动执行 `ALTER TABLE mq_consume_record DROP INDEX uk_biz_topic;`，否则多消费组场景下第二个组的落库会因旧唯一键冲突而失败。
+- **表膨胀**：`mq_consume_record` / `mq_message_retry` 会持续增长，生产环境应定期归档/清理终态（SUCCESS/DEAD）记录。
 
 ---
 
-## 九、在 RocketMQ Dashboard 观察（http://172.16.75.106:8080）
+## 十、在 RocketMQ Dashboard 观察（http://172.16.75.106:8080）
 
 - **主题（Topic）**：查看自动创建的 `demo-*-topic`；点「状态」看各队列消息总量、最后更新时间。
 - **消费者（Consumer）**：查看各消费组的在线状态、**消费进度（Diff/延迟）**、TPS；`Diff=0` 表示无堆积。
@@ -320,7 +463,7 @@ CREATE TABLE `mq_consume_record` (
 
 ---
 
-## 十、RocketMQ 延迟级别对照表
+## 十一、RocketMQ 延迟级别对照表
 
 RocketMQ 4.x **不支持任意时间延迟**，只支持 18 个固定级别（`delayLevel` 从 1 开始）：
 
@@ -337,7 +480,7 @@ RocketMQ 4.x **不支持任意时间延迟**，只支持 18 个固定级别（`d
 
 ---
 
-## 十一、常见问题（FAQ）
+## 十二、常见问题（FAQ）
 
 **Q1：启动报 `No route info of this topic`？**
 A：Topic 不存在且 broker 未开启自动创建。请在 `broker.conf` 设置 `autoCreateTopicEnable=true` 并重启 broker，或手动创建 Topic。
@@ -358,11 +501,17 @@ A：可以。修改 `pom.xml` 中的 `<boot-version>` 即可；starter 2.3.1 兼
 A：本模块引入了本地消息表（MySQL）。请确认 `172.16.75.105:3306` 可达、账号密码正确；库 `springboot-rocketmq` 会由 URL 中 `createDatabaseIfNotExist=true` 自动创建。若只想跑纯 MQ 示例，可移除 `datasource`/`jpa` 配置及 `reliability` 相关包与 JPA/MySQL 依赖。
 
 **Q7：可靠消息一直是 FAILED、不自动重试？**
-A：① 确认启动类已加 `@EnableScheduling`；② 检查 `next_retry_time` 是否已到（默认首次 10s 后）；③ 可手动调 `/reliable/retry-now` 立即触发；④ 查 `/reliable/stats` 看是否已达 `max-retry` 转 DEAD。
+A：① 确认启动类已加 `@EnableScheduling`；② 检查 `mq_message_retry` 的 `next_retry_time` 是否已到（默认首次 10s 后）；③ 可手动调 `/reliable/retry-now` 立即触发；④ 查 `/reliable/stats` 或 `/message-record/retry-stats` 看是否已达 `max-retry` 转 DEAD。
+
+**Q8：生产记录已 SUCCESS，但 `mq_consume_record` 查不到对应消费记录？**
+A：说明消息未被本应用的消费组落库。常见原因：① 生产者未通过 `RocketMQHeaders.KEYS` 设置业务 Key，消费端 `bizKey` 退化为 msgId，两表对不上；② 消息被其它应用/消费组消费，本应用消费组未订阅该 Topic；③ 消费记录按 `(bizKey, topic, consumerGroup)` 唯一，查询时需带上消费组（见 `/reliable/record` 与 9.3 多消费组幂等）。
+
+**Q9：`mq_produce_record`、`mq_consume_record`、`mq_message_retry` 三张表如何分工？**
+A：① `mq_produce_record`——生产端，记录一条被生产消息的发送生命周期（PENDING/SUCCESS/FAILED），仅含生产状态（第八节）；② `mq_consume_record`——消费端，记录一次消费的幂等与状态（CONSUMING/SUCCESS/FAILED/DEAD），按 `(bizKey, topic, consumerGroup)` 唯一（第九节）；③ `mq_message_retry`——统一重试表，用 `retry_type` 区分 PRODUCE(生产失败重发)/CONSUME(消费失败重放)，保存原始报文，由 `MessageRetryScheduler` 扫描调度。三者通过 `(bizKey, topic)` 关联，重试表用 `source_record_id` 回指来源记录。
 
 ---
 
-## 十二、与父工程的关系
+## 十三、与父工程的关系
 
 本模块是 `springboot-collection-jdk21` 的子模块，继承公共依赖（lombok 等）与插件管理，但：
 

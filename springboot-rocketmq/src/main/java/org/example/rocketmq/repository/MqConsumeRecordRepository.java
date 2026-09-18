@@ -21,10 +21,11 @@ import java.util.List;
 public interface MqConsumeRecordRepository extends JpaRepository<MqConsumeRecord, Long>, JpaSpecificationExecutor<MqConsumeRecord> {
 
     /**
-     * 按业务幂等键 + 主题查询记录（唯一）。
-     * 用于重复投递时判断该消息是否已消费成功，从而做幂等跳过。
+     * 按业务幂等键 + 主题 + 消费组查询记录（唯一）。
+     * 用于重复投递时判断该消息在<b>本消费组</b>内是否已消费成功，从而做幂等跳过。
+     * 带上 consumerGroup 是因为同一条消息可能被多个消费组各消费一次，需分别追踪。
      */
-    MqConsumeRecord findByBizKeyAndTopic(String bizKey, String topic);
+    MqConsumeRecord findByBizKeyAndTopicAndConsumerGroup(String bizKey, String topic, String consumerGroup);
 
     /**
      * 查询「待重试」的失败记录：状态为 FAILED 且下次重试时间已到期。

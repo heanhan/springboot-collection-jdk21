@@ -1,5 +1,6 @@
 package org.example.rocketmq.consumer;
 
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -7,6 +8,7 @@ import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.apache.rocketmq.spring.core.RocketMQPushConsumerLifecycleListener;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -47,6 +49,9 @@ import java.nio.charset.StandardCharsets;
 public class LifecycleManualAckConsumer
         implements RocketMQListener<MessageExt>, RocketMQPushConsumerLifecycleListener {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
     /**
      * 消费者启动前的回调：可在此对底层 DefaultMQPushConsumer 做定制。
      *
@@ -77,11 +82,17 @@ public class LifecycleManualAckConsumer
     @Override
     public void onMessage(MessageExt messageExt) {
         String body = new String(messageExt.getBody(), StandardCharsets.UTF_8);
-        log.info("[生命周期消费] msgId={}, queueId={}, queueOffset={}, body={}",
-                messageExt.getMsgId(),
-                messageExt.getQueueId(),
-                messageExt.getQueueOffset(), // 消息在队列中的位点
-                body);
-        // 正常返回即代表 ack（提交位点）。如需 nack 触发重试，只需抛出异常。
+        // 幂等键：优先用业务 Key，无则退化为 msgId
+        String keys = messageExt.getKeys();
+        String bizKey = (keys != null && !keys.isBlank()) ? keys : messageExt.getMsgId();
+        // 本消费者与 BasicConcurrentConsumer 同订 TOPIC_BASIC 但不同组；
+        // 消费记录按 (bizKey, topic, consumerGroup) 幂等，两组各自独立追踪，互不冲突。
+        reliabilityService.consume(RocketMqConstant.TOPIC_BASIC, RocketMqConstant.GROUP_LIFECYCLE,
+                messageExt.getMsgId(), bizKey, messageExt.getTags(), body, b ->
+                        log.info("[生命周期消费] msgId={}, queueId={}, queueOffset={}, body={}",
+                                messageExt.getMsgId(),
+                                messageExt.getQueueId(),
+                                messageExt.getQueueOffset(), // 消息在队列中的位点
+                                b));
     }
 }

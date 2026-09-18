@@ -1,10 +1,13 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -32,16 +35,32 @@ import org.springframework.stereotype.Service;
  */
 @Slf4j
 @Service
-@RocketMQMessageListener(
-        topic = RocketMqConstant.TOPIC_BATCH,
-        consumerGroup = RocketMqConstant.GROUP_BATCH
-)
+@RocketMQMessageListener(topic = RocketMqConstant.TOPIC_BATCH, consumerGroup = RocketMqConstant.GROUP_BATCH)
 public class BatchConsumer implements RocketMQListener<OrderMessage> {
+
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Override
     public void onMessage(OrderMessage message) {
-        // 批量发送的消息在消费端仍是逐条到达
-        log.info("[批量消费] 逐条收到: orderId={}, action={}",
-                message.getOrderId(), message.getAction());
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 接收落库 -> 执行业务 -> 成功异步回写 / 失败同步入重试表
+        reliabilityService.consume(RocketMqConstant.TOPIC_BATCH, RocketMqConstant.GROUP_BATCH,
+                null, bizKey, RocketMqConstant.TAG_A, body, b ->
+                        // 批量发送的消息在消费端仍是逐条到达
+                        log.info("[批量消费] 逐条收到: orderId={}, action={}",
+                                message.getOrderId(), message.getAction()));
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }

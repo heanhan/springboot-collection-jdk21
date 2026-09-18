@@ -33,7 +33,9 @@ public class RocketMqApplication {
                 ==========================================================
                   RocketMQ 学习 Demo 启动成功！
                   接口根路径: http://localhost:11001/rocketmq-demo
-                  测试导航页: http://localhost:11001/rocketmq-demo/producer/index
+                  生产者导航页: http://localhost:11001/rocketmq-demo/producer/index
+                  可靠消息导航页: http://localhost:11001/rocketmq-demo/reliable/index
+                  生产消息全链路记录: http://localhost:11001/rocketmq-demo/message-record/index
                 ==========================================================
                 """);
     }

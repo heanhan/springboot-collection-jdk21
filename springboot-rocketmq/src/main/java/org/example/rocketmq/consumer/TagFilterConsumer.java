@@ -1,11 +1,14 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.annotation.SelectorType;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -42,10 +45,29 @@ import org.springframework.stereotype.Service;
 )
 public class TagFilterConsumer implements RocketMQListener<OrderMessage> {
 
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        // 只有 tagA 的消息会进入这里
-        log.info("[Tag过滤消费] 收到 tagA 消息: orderId={}, action={}（tagB 已被 broker 过滤）",
-                message.getOrderId(), message.getAction());
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 接收落库 -> 执行业务 -> 成功异步回写 / 失败同步入重试表
+        reliabilityService.consume(RocketMqConstant.TOPIC_TAG, RocketMqConstant.GROUP_TAG,
+                null, bizKey, RocketMqConstant.TAG_A, body, b ->
+                        // 只有 tagA 的消息会进入这里
+                        log.info("[Tag过滤消费] 收到 tagA 消息: orderId={}, action={}（tagB 已被 broker 过滤）",
+                                message.getOrderId(), message.getAction()));
+    }
+
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }

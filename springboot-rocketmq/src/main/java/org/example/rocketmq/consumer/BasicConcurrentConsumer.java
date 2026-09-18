@@ -1,10 +1,13 @@
 package org.example.rocketmq.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.example.rocketmq.common.OrderMessage;
 import org.example.rocketmq.common.RocketMqConstant;
+import org.example.rocketmq.reliability.MessageReliabilityService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,8 +27,9 @@ import org.springframework.stereotype.Service;
  *
  * <p><b>适用业务场景</b>：普通的异步解耦任务，如日志处理、非顺序的数据同步、通知下发等。</p>
  *
- * <p><b>ACK 说明</b>：{@link #onMessage} 正常返回即代表消费成功，starter 会自动提交消费位点（ack）；
- * 若抛出异常，则会触发重试（见 RetryConsumer）。</p>
+ * <p><b>ACK 说明</b>：本消费者把消息交给 {@link MessageReliabilityService#consume} 统一处理——
+ * 接收即落库(CONSUMING)、业务成功异步回写 SUCCESS、业务失败同步置 FAILED 并写入统一重试表。
+ * {@code consume} 内部<b>吞掉</b>业务异常（等于向 broker ack），改由数据库重试接管，避免与 broker 重试双重触发。</p>
  *
  * @author demo
  */
@@ -40,11 +44,33 @@ import org.springframework.stereotype.Service;
 )
 public class BasicConcurrentConsumer implements RocketMQListener<OrderMessage> {
 
+    /** 消费端可靠性服务：接收落库 + 消费状态回写 + 失败入统一重试表 */
+    @Resource
+    private MessageReliabilityService reliabilityService;
+
+    /** 用于把 OrderMessage 序列化为 JSON 存入 mq_consume_record.body（失败重试时凭此重放） */
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     public void onMessage(OrderMessage message) {
-        // 这里编写真正的业务处理逻辑
-        log.info("[并发消费] 收到消息: orderId={}, action={}, amount={}",
-                message.getOrderId(), message.getAction(), message.getAmount());
-        // 正常返回 -> 消费成功，自动提交位点；抛异常 -> 进入重试队列
+        // bizKey 与生产端落库时一致（orderId），作为幂等键
+        String bizKey = message.getOrderId();
+        String body = toJson(message);
+        // 交给可靠性服务统一处理：落库(CONSUMING) -> 执行业务 -> 成功异步回写 / 失败同步入重试表
+        reliabilityService.consume(RocketMqConstant.TOPIC_BASIC, RocketMqConstant.GROUP_BASIC,
+                null, bizKey, null, body, b ->
+                        // 这里编写真正的业务处理逻辑
+                        log.info("[并发消费] 收到消息: orderId={}, action={}, amount={}",
+                                message.getOrderId(), message.getAction(), message.getAmount()));
+    }
+
+    /** 序列化为 JSON，失败降级为 toString（不影响主流程） */
+    private String toJson(Object payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            return String.valueOf(payload);
+        }
     }
 }
