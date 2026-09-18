@@ -12,12 +12,7 @@
     <artifactId>dynamic-datasource-jpa</artifactId>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <commons-lang3.version>3.10</commons-lang3.version>
         <io-jwt.version>0.12.5</io-jwt.version>
-        <mysql-connector.version>8.0.21</mysql-connector.version>
     </properties>
 
     <dependencies>
@@ -25,7 +20,6 @@
         <dependency>
             <groupId>com.example.web</groupId>
             <artifactId>springboot-starter-web</artifactId>
-            <version>1.0</version>
         </dependency>
 
         <!-- springboot validation -->
@@ -49,13 +43,6 @@
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
-            <version>8.2.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>${mysql-connector.version}</version>
         </dependency>
 
         <!--引入spring-data-jpa依赖-->
@@ -77,20 +64,17 @@
         <dependency>
             <groupId>org.hibernate.orm</groupId>
             <artifactId>hibernate-core</artifactId>
-            <version>6.2.7.Final</version>
         </dependency>
 
         <!--druid 的坐标-->
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>druid-spring-boot-starter</artifactId>
-            <version>1.2.16</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
         </dependency>
 
         <dependency>
@@ -98,11 +82,6 @@
             <artifactId>jjwt-api</artifactId>
             <version>${io-jwt.version}</version>
         </dependency>
-
-
-
-
-
 
     </dependencies>
 </project>
