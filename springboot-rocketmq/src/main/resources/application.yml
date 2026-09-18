@@ -1,3 +1,50 @@
+# ===================================================================
+# Spring Boot + Apache RocketMQ 学习 Demo 配置
+# 说明：本文件为完整、可独立运行的配置（不再拆分 profile）
+# ===================================================================
+server:
+  # 应用端口
+  port: 11001
+  servlet:
+    # 统一上下文路径，所有接口以 /rocketmq-demo 开头
+    context-path: /rocketmq-demo
+
 spring:
-  profiles:
-    active: dev
+  application:
+    name: springboot-rocketmq
+
+# ========================= RocketMQ 核心配置 =========================
+rocketmq:
+  # NameServer 地址；集群部署时多个地址用英文分号(;)分隔。当前环境未开启 ACL。
+  name-server: 172.16.75.106:9876
+  producer:
+    # 【必填】生产者组名；事务消息也复用该生产者组
+    group: demo-producer-group
+    # 同步发送超时时间（毫秒）
+    send-message-timeout: 3000
+    # 同步发送失败后的重试次数
+    retry-times-when-send-failed: 2
+    # 异步发送失败后的重试次数
+    retry-times-when-send-async-failed: 2
+    # 单次异步发送重试的间隔（毫秒）
+    retry-next-delay-time-millis: 1000
+    # 单条消息最大长度：4MB（4 * 1024 * 1024）
+    max-message-size: 4194304
+
+# ============================ 日志配置 ============================
+# 打开 RocketMQ 客户端与本 Demo 的日志，便于学习时观察发送/消费过程
+logging:
+  level:
+    org.apache.rocketmq: INFO
+    org.example.rocketmq: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# ===================================================================
+# 备注：
+# 1) 消费者的组名、Topic、消费模式（集群/广播）、Tag 过滤等，均在各个
+#    @RocketMQMessageListener 注解中单独指定，不在此处全局配置，
+#    这样每个消费者示例都可独立运行、互不干扰。
+# 2) “自动创建 Topic” 属于 broker 端配置（autoCreateTopicEnable=true），
+#    需确保 172.16.75.106 上的 broker 已开启；开启后首次发送即可自动建 Topic。
+# ===================================================================

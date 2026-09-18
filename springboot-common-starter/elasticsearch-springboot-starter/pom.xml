@@ -13,10 +13,6 @@
 
     <name>elasticsearch-springboot-starter</name>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <dependencies>
 
     </dependencies>

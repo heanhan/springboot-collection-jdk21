@@ -13,23 +13,17 @@
 
     <name>springboot-minio</name>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <dependencies>
 
         <dependency>
             <groupId>com.example.web</groupId>
             <artifactId>springboot-starter-web</artifactId>
-            <version>1.0</version>
         </dependency>
 
         <!--minio-->
         <dependency>
             <groupId>com.example.minio.starter</groupId>
             <artifactId>mino-springboot-starter</artifactId>
-            <version>1.0</version>
         </dependency>
 
     </dependencies>

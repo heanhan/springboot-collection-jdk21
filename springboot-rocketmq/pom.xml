@@ -1,6 +1,10 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- 继承父工程，复用统一的插件管理与公共依赖（lombok 等） -->
     <parent>
         <groupId>com.example</groupId>
         <artifactId>springboot-collection-jdk21</artifactId>
@@ -12,53 +16,76 @@
     <packaging>jar</packaging>
 
     <name>springboot-rocketmq</name>
-
+    <description>Spring Boot 3 + Apache RocketMQ 学习 Demo（生产者 / 消费者全场景示例）</description>
 
     <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+          覆盖父工程的 Spring Boot 版本。
+          JDK 21 推荐使用 3.3.x（父工程默认为 3.2.0，此处按需求升级到 3.3.5）。
+        -->
+        <boot-version>3.3.5</boot-version>
+
+        <!--
+          rocketmq-spring-boot-starter 版本说明（重要）：
+          1) Spring Boot 3 使用 jakarta 命名空间，必须使用 2.3.x 及以上版本；
+             2.2.x 是面向 Spring Boot 2（javax）的，不能用于 Boot 3。
+          2) 2.3.1 默认捆绑 rocketmq-client 5.3.0（remoting 协议），
+             该客户端向下兼容 RocketMQ 4.9.x broker，可直接对接本 Demo 的 4.9.6 服务端。
+          3) 若强行把 rocketmq-client 降级到 4.9.6，可能与 starter 2.3.1 编译期 API 不匹配，
+             因此保持 starter 默认客户端版本，仅在服务端使用 4.9.6。
+        -->
+        <rocketmq-spring.version>2.3.1</rocketmq-spring.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- 显式导入 Spring Boot 3.3.5 BOM，使本模块独立于父工程的 3.2.0 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${boot-version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- 锁定 RocketMQ starter 版本 -->
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
+        <!-- Web：对外提供 REST 接口，方便逐个触发各类生产者场景 -->
         <dependency>
-            <groupId>com.example.web</groupId>
-            <artifactId>springboot-starter-web</artifactId>
-            <version>1.0</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.rocketmq</groupId>
-            <artifactId>rocketmq-spring-boot-starter</artifactId>
-            <version>2.2.3</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>fastjson</artifactId>
-                    <groupId>com.alibaba</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>guava</artifactId>
-                    <groupId>com.google.guava</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
+        <!-- RocketMQ 官方 starter：注解式生产者（RocketMQTemplate）与消费者（@RocketMQMessageListener） -->
         <dependency>
             <groupId>org.apache.rocketmq</groupId>
             <artifactId>rocketmq-spring-boot-starter</artifactId>
-            <version>2.3.0</version>
         </dependency>
 
-
-
+        <!-- 单元测试（可选，用于集成测试） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
-    <!-- 构建管理 -->
     <build>
         <finalName>${project.artifactId}</finalName>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
+        <plugins>
+            <!-- 打包可执行 jar，版本由父工程 pluginManagement 统一管理（${boot-version}） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 </project>

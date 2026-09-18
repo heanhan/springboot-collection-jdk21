@@ -14,16 +14,11 @@
     <name>springboot-test</name>
 
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <dependencies>
 
         <dependency>
             <groupId>com.example.web</groupId>
             <artifactId>springboot-starter-web</artifactId>
-            <version>1.0</version>
         </dependency>
 
     </dependencies>
