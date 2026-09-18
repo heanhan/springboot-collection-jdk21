@@ -13,6 +13,37 @@ spring:
   application:
     name: springboot-rocketmq
 
+  # ================== 数据源（本地消息表 mq_consume_record） ==================
+  # 用于消息落库：幂等去重、失败记录、数据库重试。createDatabaseIfNotExist=true 会自动建库。
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.16.75.105:3306/springboot-rocketmq?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: abcd@123456
+
+  # ================== JPA / Hibernate ==================
+  jpa:
+    hibernate:
+      # 首次启动自动建表（mq_consume_record）；生产环境建议改为 validate 并用 DDL 脚本管理
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# ================== 可靠消息（本地消息表）自定义配置 ==================
+reliability:
+  # 单条消息最大重试次数，达到后置为死信（DEAD），不再自动重试
+  max-retry: 3
+  # 重试基础间隔（秒），采用递增退避：第 n 次重试延迟 = base-retry-interval * n
+  base-retry-interval-seconds: 10
+  # 失败消息扫描调度间隔（毫秒），定时从数据库捞出到期的失败消息重试
+  retry-scan-interval-millis: 10000
+  # 每次扫描最多处理条数，避免单次任务过重
+  retry-batch-size: 50
+
 # ========================= RocketMQ 核心配置 =========================
 rocketmq:
   # NameServer 地址；集群部署时多个地址用英文分号(;)分隔。当前环境未开启 ACL。
@@ -47,4 +78,6 @@ logging:
 #    这样每个消费者示例都可独立运行、互不干扰。
 # 2) “自动创建 Topic” 属于 broker 端配置（autoCreateTopicEnable=true），
 #    需确保 172.16.75.106 上的 broker 已开启；开启后首次发送即可自动建 Topic。
+# 3) 本模块新增了 MySQL 依赖（本地消息表），启动前需确保 172.16.75.105:3306 可连；
+#    若不使用“可靠消息”演示，可删除 datasource/jpa 配置及 reliability 包。
 # ===================================================================

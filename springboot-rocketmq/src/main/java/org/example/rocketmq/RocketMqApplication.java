@@ -2,6 +2,7 @@ package org.example.rocketmq;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * RocketMQ 学习 Demo 启动类。
@@ -19,6 +20,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * @author demo
  */
+// @EnableScheduling：开启定时任务，用于「本地消息表」失败消息的数据库重试调度
+@EnableScheduling
 @SpringBootApplication
 public class RocketMqApplication {
 
