@@ -13,10 +13,14 @@
 
     <groupId>org.example.rocketmq</groupId>
     <artifactId>springboot-rocketmq</artifactId>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
 
     <name>springboot-rocketmq</name>
     <description>Spring Boot 3 + Apache RocketMQ 学习 Demo（生产者 / 消费者全场景示例）</description>
+    <modules>
+        <module>rocketmq-product</module>
+        <module>rocketmq-consume</module>
+    </modules>
 
     <properties>
         <!--

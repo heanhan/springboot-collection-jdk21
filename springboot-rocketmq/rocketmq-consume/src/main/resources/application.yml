@@ -1,0 +1,84 @@
+# ===================================================================
+# rocketmq-consume（消费者服务）配置
+# 说明：本模块只负责消费端场景 —— 并发/顺序/广播/Tag 过滤/失败重试/延迟/批量/事务/手动 ACK，
+#      并配套「本地消息表」的消费端幂等落库、失败重试与死信处理。
+#      如需触发消息发送，请启动 rocketmq-product 模块。
+# ===================================================================
+server:
+  # 消费者服务端口（与 rocketmq-product 的 11001 区分）
+  # 说明：消费者模块本身不对外暴露业务 REST 接口，此端口仅由 spring-boot-starter-web 引入的
+  #      内嵌 Tomcat 占用，避免与生产者模块冲突即可。
+  port: 11002
+
+spring:
+  application:
+    name: rocketmq-consume
+
+  # ================== 数据源（三张表：生产 mq_produce_record / 消费 mq_consume_record / 重试 mq_message_retry） ==================
+  # 消费者模块主要读写 mq_consume_record 与 mq_message_retry；
+  # mq_produce_record 由 MessageRetryService 在「生产重发成功」时回写，因此仍需连接。
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.16.75.105:3306/springboot-rocketmq?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: abcd@123456
+
+  # ================== JPA / Hibernate ==================
+  jpa:
+    hibernate:
+      # 首次启动自动建表；生产环境建议改为 validate 并用 DDL 脚本管理
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# ================== 可靠消息（本地消息表）自定义配置 ==================
+reliability:
+  # 单条消息最大重试次数，达到后置为死信（DEAD），不再自动重试
+  max-retry: 3
+  # 重试基础间隔（秒），采用递增退避：第 n 次重试延迟 = base-retry-interval * n
+  base-retry-interval-seconds: 10
+  # 失败消息扫描调度间隔（毫秒）
+  retry-scan-interval-millis: 10000
+  # 每次扫描最多处理条数
+  retry-batch-size: 50
+  # ---------- 异步落库线程池（JUC） ----------
+  async:
+    core-pool-size: 4
+    max-pool-size: 8
+    queue-capacity: 2000
+    keep-alive-seconds: 60
+
+# ========================= RocketMQ 核心配置 =========================
+rocketmq:
+  # NameServer 地址；集群部署时多个地址用英文分号(;)分隔
+  name-server: 172.16.75.106:9876
+  # 说明：本模块以消费为主，但 MessageRetryService 在「生产重发」路径中会用到 RocketMQTemplate，
+  #      因此仍需配置一个 producer group（消费者模块本身不会主动发送业务消息）。
+  producer:
+    group: demo-producer-group
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 2
+    retry-times-when-send-async-failed: 2
+    retry-next-delay-time-millis: 1000
+    max-message-size: 4194304
+
+# ============================ 日志配置 ============================
+logging:
+  level:
+    org.apache.rocketmq: INFO
+    org.example.rocketmq: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# ===================================================================
+# 备注：
+# 1) 各消费者的组名、Topic、消费模式（集群/广播）、Tag 过滤等，均在
+#    @RocketMQMessageListener 注解中单独指定，不在此处全局配置。
+# 2) 消费者模块与生产者模块共用同一张 MySQL 库表；两个模块的
+#    MessageRetryScheduler 均默认注释了 @Scheduled，避免多实例竞争扫表。
+#    如需自动重试，可择一模块开启。
+# ===================================================================

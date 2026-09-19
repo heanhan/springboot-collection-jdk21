@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      继承 springboot-rocketmq 父模块：
+      - 复用统一的 Spring Boot 3.3.5 BOM 与 rocketmq-spring-boot-starter 2.3.1 版本；
+      - 复用父模块声明的公共依赖（web / rocketmq-starter / jpa / mysql / test）；
+      - 复用父模块的 spring-boot-maven-plugin 打包配置。
+    -->
+    <parent>
+        <groupId>org.example.rocketmq</groupId>
+        <artifactId>springboot-rocketmq</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>rocketmq-consume</artifactId>
+    <packaging>jar</packaging>
+
+    <name>rocketmq-consume</name>
+    <description>RocketMQ 消费者服务：并发/顺序/广播/Tag 过滤/失败重试/延迟/批量/事务/手动 ACK + 本地消息表消费端幂等与重试</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <!--
+      依赖说明：
+      spring-boot-starter-web / rocketmq-spring-boot-starter / spring-boot-starter-data-jpa /
+      mysql-connector-j / spring-boot-starter-test / lombok 均由父模块 springboot-rocketmq
+      与祖父模块 springboot-collection-jdk21 通过 <dependencies> 直接下发，无需在此重复声明。
+    -->
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <!-- 打成可执行 jar，主类由 spring-boot-maven-plugin 自动探测（ConsumeApplication） -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>org.example.rocketmq.ConsumeApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
