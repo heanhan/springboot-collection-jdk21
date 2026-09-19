@@ -31,6 +31,7 @@
         <module>springboot-elasticsearch</module>
         <module>springboot-mybatis-plus</module>
         <module>springboot-ai</module>
+        <module>springboot-ddd-project</module>
     </modules>
 
     <properties>

@@ -1,0 +1,63 @@
+# ==============================================================================
+# ddd-logistics-service 主配置
+# ==============================================================================
+server:
+  port: 8087
+
+spring:
+  application:
+    name: ddd-logistics-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/ddd_logistics?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 6
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: ddd-logistics-producer
+
+ddd:
+  messaging:
+    enabled: true
+  web:
+    errors: true
+  services:
+    auth-url: http://localhost:8081
+    order-url: http://localhost:8085
+    inventory-url: http://localhost:8084
+  logistics:
+    mock-enabled: ${LOGISTICS_MOCK_ENABLED:false}
+    # Mock 承运商：定时推进物流轨迹的间隔（秒）
+    mock-track-interval-seconds: 30
+
+logging:
+  level:
+    root: INFO
+    com.example.ddd: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

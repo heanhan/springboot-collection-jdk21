@@ -1,0 +1,118 @@
+# ==============================================================================
+# DDD 学习项目本地依赖组件
+# ==============================================================================
+# 一键启动 MySQL 8 + Redis 7 + RocketMQ 5 (NameServer + Broker + Dashboard)
+#
+# 使用方式：
+#   cd springboot-ddd-project
+#   docker-compose up -d
+#   docker-compose ps       # 查看状态
+#   docker-compose logs -f  # 查看日志
+#   docker-compose down     # 停止并删除容器
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # MySQL 8：每个服务使用独立 Schema，Flyway 自动创建表结构
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: ddd-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --max_connections=500
+    ports:
+      - "3306:3306"
+    volumes:
+      - ddd-mysql-data:/var/lib/mysql
+      # 首次启动时创建所有 Schema
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Redis 7：Token 黑名单、权限缓存、库存预扣减、幂等键
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ddd-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - ddd-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # RocketMQ NameServer
+  # ---------------------------------------------------------------------------
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.1.4
+    container_name: ddd-rocketmq-namesrv
+    restart: unless-stopped
+    ports:
+      - "9876:9876"
+    environment:
+      JAVA_OPT_EXT: "-Xms256m -Xmx256m -Xmn128m"
+    command: sh mqnamesrv
+    volumes:
+      - ddd-rocketmq-namesrv-logs:/home/rocketmq/logs
+
+  # ---------------------------------------------------------------------------
+  # RocketMQ Broker
+  # ---------------------------------------------------------------------------
+  rocketmq-broker:
+    image: apache/rocketmq:5.1.4
+    container_name: ddd-rocketmq-broker
+    restart: unless-stopped
+    depends_on:
+      - rocketmq-namesrv
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn256m"
+    command: sh mqbroker -c /home/rocketmq/broker.conf
+    volumes:
+      - ./docker/rocketmq/broker.conf:/home/rocketmq/broker.conf
+      - ddd-rocketmq-broker-logs:/home/rocketmq/logs
+      - ddd-rocketmq-broker-store:/home/rocketmq/store
+
+  # ---------------------------------------------------------------------------
+  # RocketMQ Dashboard (可选，方便观察 Topic / 消费进度)
+  # ---------------------------------------------------------------------------
+  rocketmq-dashboard:
+    image: apacherocketmq/rocketmq-dashboard:latest
+    container_name: ddd-rocketmq-dashboard
+    restart: unless-stopped
+    depends_on:
+      - rocketmq-namesrv
+    ports:
+      - "18080:8080"
+    environment:
+      JAVA_OPTS: "-Drocketmq.namesrv.addr=rocketmq-namesrv:9876"
+
+volumes:
+  ddd-mysql-data:
+  ddd-redis-data:
+  ddd-rocketmq-namesrv-logs:
+  ddd-rocketmq-broker-logs:
+  ddd-rocketmq-broker-store:

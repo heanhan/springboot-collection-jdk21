@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ============================================================================
+    ddd-api-contract  跨服务契约 (Published Language)
+    ============================================================================
+    在 DDD 中，跨限界上下文通信需要一种"发布语言 (Published Language)"，
+    即双方共同认可的数据契约。本模块就是这个契约的物理载体：
+
+    包含内容：
+      - Feign Client 接口 (仅接口，无实现) —— 供消费方引入并注入
+      - 请求 / 响应 DTO —— 供两端序列化 / 反序列化
+      - 跨上下文的领域事件 payload 类 —— 通过 RocketMQ 传递
+
+    设计原则：
+      1. 本模块【不含任何业务逻辑】，只是"数据形状"与"接口签名"。
+      2. 使用 JDK 21 record 定义 DTO，天然不可变。
+      3. 契约一旦发布就要保持向后兼容，新增字段用 optional，删除字段先废弃再移除。
+      4. 各服务的 Controller 会实现本模块中的 Feign 接口 (作为服务端)，
+         消费方直接注入接口 (作为客户端)，实现"接口即契约"。
+    ============================================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.example.ddd</groupId>
+        <artifactId>springboot-ddd-project</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>ddd-api-contract</artifactId>
+    <packaging>jar</packaging>
+
+    <name>ddd-api-contract</name>
+    <description>跨服务 Feign Client 契约与 DTO (发布语言)</description>
+
+    <dependencies>
+        <!-- 共享内核：Result / Money / 领域事件基类 -->
+        <dependency>
+            <groupId>com.example.ddd</groupId>
+            <artifactId>ddd-common</artifactId>
+        </dependency>
+
+        <!-- OpenFeign：仅需要 @FeignClient 注解类型，运行时由服务侧提供 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring Web：@GetMapping/@PostMapping/@RequestBody 等注解类型 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>
