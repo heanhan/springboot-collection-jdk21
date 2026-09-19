@@ -1,9 +1,10 @@
 # ===================================================================
-# Spring Boot + Apache RocketMQ 学习 Demo 配置
-# 说明：本文件为完整、可独立运行的配置（不再拆分 profile）
+# rocketmq-product（生产者服务）配置
+# 说明：本模块只负责生产端场景 —— 8 种发送方式、事务回查、本地消息表落库与重试。
+#      对应的消费者示例请启动 rocketmq-consume 模块。
 # ===================================================================
 server:
-  # 应用端口
+  # 生产者服务端口（与 rocketmq-consume 的 11002 区分）
   port: 11001
   servlet:
     # 统一上下文路径，所有接口以 /rocketmq-demo 开头
@@ -11,10 +12,11 @@ server:
 
 spring:
   application:
-    name: springboot-rocketmq
+    name: rocketmq-product
 
   # ================== 数据源（三张表：生产 mq_produce_record / 消费 mq_consume_record / 重试 mq_message_retry） ==================
-  # 用于消息落库：生产端发送记录、消费端幂等去重与状态、失败消息统一重试。createDatabaseIfNotExist=true 会自动建库。
+  # 生产者模块主要读写 mq_produce_record 与 mq_message_retry；
+  # mq_consume_record 由 MessageRetryService 在「消费重放成功/死信」时回写，因此仍需连接。
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://172.16.75.105:3306/springboot-rocketmq?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
@@ -24,7 +26,7 @@ spring:
   # ================== JPA / Hibernate ==================
   jpa:
     hibernate:
-      # 首次启动自动建表（mq_produce_record、mq_consume_record、mq_message_retry）；生产环境建议改为 validate 并用 DDL 脚本管理
+      # 首次启动自动建表；生产环境建议改为 validate 并用 DDL 脚本管理
       ddl-auto: update
       naming:
         physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
@@ -43,20 +45,16 @@ reliability:
   retry-scan-interval-millis: 10000
   # 每次扫描最多处理条数，避免单次任务过重
   retry-batch-size: 50
-  # ---------- 异步落库线程池（JUC）：把「发送/消费成功」的状态回写从主链路剥离，提升吞吐 ----------
+  # ---------- 异步落库线程池（JUC） ----------
   async:
-    # 核心线程数
     core-pool-size: 4
-    # 最大线程数
     max-pool-size: 8
-    # 有界队列容量：防止任务无限堆积导致 OOM；队列满时由 CallerRunsPolicy 形成背压
     queue-capacity: 2000
-    # 非核心线程空闲存活时间（秒）
     keep-alive-seconds: 60
 
 # ========================= RocketMQ 核心配置 =========================
 rocketmq:
-  # NameServer 地址；集群部署时多个地址用英文分号(;)分隔。当前环境未开启 ACL。
+  # NameServer 地址；集群部署时多个地址用英文分号(;)分隔
   name-server: 172.16.75.106:9876
   producer:
     # 【必填】生产者组名；事务消息也复用该生产者组
@@ -69,25 +67,13 @@ rocketmq:
     retry-times-when-send-async-failed: 2
     # 单次异步发送重试的间隔（毫秒）
     retry-next-delay-time-millis: 1000
-    # 单条消息最大长度：4MB（4 * 1024 * 1024）
+    # 单条消息最大长度：4MB
     max-message-size: 4194304
 
 # ============================ 日志配置 ============================
-# 打开 RocketMQ 客户端与本 Demo 的日志，便于学习时观察发送/消费过程
 logging:
   level:
     org.apache.rocketmq: INFO
     org.example.rocketmq: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-
-# ===================================================================
-# 备注：
-# 1) 消费者的组名、Topic、消费模式（集群/广播）、Tag 过滤等，均在各个
-#    @RocketMQMessageListener 注解中单独指定，不在此处全局配置，
-#    这样每个消费者示例都可独立运行、互不干扰。
-# 2) “自动创建 Topic” 属于 broker 端配置（autoCreateTopicEnable=true），
-#    需确保 172.16.75.106 上的 broker 已开启；开启后首次发送即可自动建 Topic。
-# 3) 本模块新增了 MySQL 依赖（本地消息表），启动前需确保 172.16.75.105:3306 可连；
-#    若不使用“可靠消息”演示，可删除 datasource/jpa 配置及 reliability 包。
-# ===================================================================
