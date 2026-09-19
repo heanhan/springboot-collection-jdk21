@@ -1,0 +1,26 @@
+# 本地开发覆盖：连接地址、独立 schema/Redis 库继承 application.yml，环境变量仍可覆盖。
+# 不启用模拟支付，也不记录凭据、SQL 绑定参数和 HTTP 请求体。
+spring:
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 3000
+            read-timeout: 5000
+            logger-level: none
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.example.ddd: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: "OFF"
+    org.hibernate.type.descriptor.sql.BasicBinder: "OFF"
+
+management:
+  endpoint:
+    health:
+      show-details: never

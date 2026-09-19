@@ -1,0 +1,58 @@
+# ==============================================================================
+# ddd-product-service 主配置
+# ==============================================================================
+server:
+  port: 8083
+
+spring:
+  application:
+    name: ddd-product-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/ddd_product?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 2
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: ddd-product-producer
+
+ddd:
+  services:
+    auth-url: http://localhost:8081
+
+logging:
+  level:
+    root: INFO
+    com.example.ddd: DEBUG
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

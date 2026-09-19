@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ============================================================================
+    ddd-common  共享内核 (Shared Kernel)
+    ============================================================================
+    DDD 中"共享内核"是一种被多个限界上下文共同使用的、经过精心设计的模型片段。
+    它只放"跨上下文通用且稳定"的东西，比如：
+      - 通用值对象 (Value Object)：Money / Address / Mobile / Email
+      - 领域事件基类：DomainEvent / BaseAggregateRoot
+      - 统一响应与异常：Result / BusinessException / ErrorCode
+      - 基础设施工具：IdGenerator (雪花) / JsonUtils
+      - JPA 通用抽象：AbstractJpaAuditablePO
+
+    本模块【不是可运行服务】，packaging = jar，被所有业务服务依赖。
+    ============================================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.example.ddd</groupId>
+        <artifactId>springboot-ddd-project</artifactId>
+        <version>1.0</version>
+    </parent>
+
+    <artifactId>ddd-common</artifactId>
+    <packaging>jar</packaging>
+
+    <name>ddd-common</name>
+    <description>DDD 共享内核：值对象 / 领域事件基类 / 统一响应 / 异常体系</description>
+
+    <dependencies>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId><optional>true</optional></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId><optional>true</optional></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId><optional>true</optional></dependency>
+        <dependency><groupId>org.apache.rocketmq</groupId><artifactId>rocketmq-spring-boot-starter</artifactId><optional>true</optional></dependency>
+        <!-- JPA API：仅需要 @MappedSuperclass / @PrePersist 等注解，运行时由各服务提供实现 -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Jackson：领域事件的 JSON 序列化 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- Servlet API：Result 需要读取 traceId 时使用 (provided，容器提供) -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

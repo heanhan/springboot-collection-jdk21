@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 每个服务独立加载，服务名来自 Spring；只写控制台，便于容器采集。 -->
+    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="ddd-service"/>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <property name="CONSOLE_LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [${serviceName}] [%thread] %logger{40} : %msg%n%wEx"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
