@@ -25,9 +25,9 @@
     <properties>
         <!--
           覆盖父工程的 Spring Boot 版本。
-          JDK 21 推荐使用 3.3.x（父工程默认为 3.2.0，此处按需求升级到 3.3.5）。
+          与父工程保持一致，统一升级到 3.5.16（JDK 21 兼容）。
         -->
-        <boot-version>3.3.5</boot-version>
+        <boot-version>3.5.16</boot-version>
 
         <!--
           rocketmq-spring-boot-starter 版本说明（重要）：
@@ -43,7 +43,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- 显式导入 Spring Boot 3.3.5 BOM，使本模块独立于父工程的 3.2.0 -->
+            <!-- 显式导入 Spring Boot 3.5.16 BOM，与父工程版本保持一致 -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
