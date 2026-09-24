@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: springboot-ai-alibaba-hello
+
+  ai:
+    dashscope:
+      # 百炼 API Key，建议通过环境变量 AI_DASHSCOPE_API_KEY 注入，避免硬编码泄露
+      api-key: ${AI_DASHSCOPE_API_KEY:sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+      chat:
+        options:
+          # 对话模型，可按需替换为 qwen-turbo / qwen-max 等
+          model: qwen-plus
