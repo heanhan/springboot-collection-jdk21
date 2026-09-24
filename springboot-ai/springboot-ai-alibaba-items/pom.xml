@@ -8,23 +8,53 @@
     </parent>
 
     <artifactId>springboot-ai-alibaba-items</artifactId>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
 
     <name>springboot-ai-alibaba-items</name>
-    <description>Spring AI Alibaba（百炼 DashScope）技术运用 demo</description>
+    <description>Spring AI Alibaba（百炼 DashScope）技术运用聚合模块：仅做依赖版本统一管理，具体示例见子模块</description>
+
+    <!-- 聚合所有 Spring AI Alibaba 学习/示例子模块 -->
+    <modules>
+        <module>springboot-ai-alibaba-hello</module>
+        <module>springboot-ai-alibaba-tcm</module>
+    </modules>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+          Spring AI Alibaba 最新稳定版 1.1.2.2。
+          注意：SAA 1.1.2.x 依赖 Spring AI 1.1.2（而非父工程的 1.0.0），
+          故在本子树覆盖 spring-ai.version，仅影响 items 及其子模块，
+          不改变 springboot-spring-ai 等兄弟模块的版本。
+        -->
+        <spring-ai-alibaba.version>1.1.2.2</spring-ai-alibaba.version>
+        <spring-ai.version>1.1.2</spring-ai.version>
     </properties>
 
-
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
+    <!--
+      统一版本管理：
+      1) 覆盖父工程的 spring-ai-bom 到 1.1.2，满足 SAA 1.1.2.2 的依赖要求；
+      2) 导入 spring-ai-alibaba-bom 1.1.2.2，统一管理 agent-framework、
+         starter-agentscope、graph-core 等模块版本。
+      特别注意：SAA 1.1.2.2 的 BOM 并不管理 spring-ai-alibaba-starter-dashscope，
+      子模块引用 dashscope starter 时需显式写版本（${spring-ai-alibaba.version}）。
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>${spring-ai-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
