@@ -33,19 +33,26 @@ public class LoginInfo {
      */
     private Integer tenantId = 0;
 
+    public static LoginInfo fromUser(com.example.dynamic.jpa.system.entity.User user) {
+        LoginInfo info = new LoginInfo();
+        info.setUserId(user.getId());
+        info.setTenantId(user.getTenantId());
+        return info;
+    }
+
     /**
      * 从token中解析用户信息
      *
      * @param token token
      * @return cn.greenbon.api.utils.Identity
      */
-    public static LoginInfo getLoginInfoByToken(String token) {
+    public static LoginInfo getLoginInfoByToken(String token, JwtUtil jwtUtil) {
         if (StringUtils.isEmpty(token)) {
             return null;
         }
         try {
             token = token.replace(JwtUtil.TOKEN_PREFIX, JwtUtil.EMPTY_STRING);
-            Claims tokenBody = JwtUtil.getTokenBody(token, JwtUtil.TOKEN_SECRET);
+            Claims tokenBody = jwtUtil.parseToken(token);
             Map<String, Object> extendInfo = (Map<String, Object>) tokenBody.get(JwtUtil.EXTEND_INFO);
             return MapUtils.map2Bean(extendInfo, LoginInfo.class);
         } catch (Exception e) {

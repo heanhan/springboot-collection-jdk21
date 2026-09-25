@@ -35,7 +35,7 @@ public interface TenantService {
      * @param id 租户id
      * @return boolean
      */
-    boolean deleteTenant(String id);
+    boolean deleteTenant(Integer id);
 
     /**
      * 根据租户id获取租户
@@ -43,7 +43,7 @@ public interface TenantService {
      * @param id 租户id
      * @return cn.greenbon.api.business.system.bean.Tenant
      */
-    Tenant getTenantById(String id);
+    Tenant getTenantById(Integer id);
 
     /**
      * 获取所有租户

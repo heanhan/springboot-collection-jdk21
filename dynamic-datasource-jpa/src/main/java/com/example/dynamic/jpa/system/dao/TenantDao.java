@@ -13,6 +13,16 @@ import org.springframework.stereotype.Repository;
  */
 
 @Repository
-public interface TenantDao extends BaseRepository<Tenant,String>, JpaSpecificationExecutor<Tenant> {
+public interface TenantDao extends BaseRepository<Tenant,Integer>, JpaSpecificationExecutor<Tenant> {
+
+    java.util.Optional<Tenant> findByIdAndIsDelFalse(Integer id);
+
+    java.util.Optional<Tenant> findByTenantNameAndIsDelFalse(String tenantName);
+
+    java.util.List<Tenant> findAllByIsDelFalse();
+
+    boolean existsByPhoneAndIsDelFalse(String phone);
+
+    boolean existsByPhoneAndIdNotAndIsDelFalse(String phone, Integer id);
 
 }

@@ -41,4 +41,12 @@ public interface UserDao extends BaseRepository<User,Integer>, JpaSpecificationE
 
     @Query(value = "select * from sys_user where username=?1 and status=?2 ",nativeQuery = true)
     User getUserByName(String username, int value);
+
+    boolean existsByUsername(String username);
+
+    boolean existsByPhoneAndStatus(String phone, Integer status);
+
+    boolean existsByPhoneAndIdNotAndStatus(String phone, Integer id, Integer status);
+
+    boolean existsByRoleIdAndStatus(Integer roleId, Integer status);
 }

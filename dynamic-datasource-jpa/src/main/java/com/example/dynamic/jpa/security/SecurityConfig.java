@@ -4,7 +4,6 @@ import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.ObjectPostProcessor;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.builders.WebSecurity;
@@ -13,7 +12,6 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.intercept.FilterSecurityInterceptor;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 
@@ -26,16 +24,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     /**
-     * 权限过滤器（当前url所需要的访问权限）
+     * 动态RBAC授权管理器
      */
     @Resource
-    private MyFilterInvocationSecurityMetadataSource filterMetadataSource;
-
-    /**
-     * 权限决策器
-     */
-    @Resource
-    private MyAccessDecisionManager myAccessDecisionManager;
+    private RbacAuthorizationManager rbacAuthorizationManager;
 
     /**
      * 自定义错误(401)返回数据
@@ -68,19 +60,18 @@ public class SecurityConfig {
 
 
     @Bean
-    UserJwtLoginFilter userJwtLoginFilter() throws Exception {
-//        userJwtLoginFilter();
-        UserJwtLoginFilter _userJwtLoginFilter = new UserJwtLoginFilter();
-        _userJwtLoginFilter.setAuthenticationManager(authenticationManager());
-//        _userJwtLoginFilter.setFilterProcessesUrl("/api/login");
-        return _userJwtLoginFilter;
+    org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(
+            JwtAuthenticationFilter filter) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /**
      * 装载BCrypt密码编码器
      */
     @Bean
-    public BCryptPasswordEncoder bCryptPasswordEncoder() {
+    public static BCryptPasswordEncoder bCryptPasswordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
@@ -107,40 +98,30 @@ public class SecurityConfig {
 
     /**
      * HttpSecurity包含了原数据（主要是url）
-     * 通过withObjectPostProcessor将MyFilterInvocationSecurityMetadataSource和MyAccessDecisionManager注入进来
-     * 此url先被MyFilterInvocationSecurityMetadataSource处理，然后 丢给 MyAccessDecisionManager处理
-     * 如果不匹配，返回 MyAccessDeniedHandler
+     * 登录和错误页固定放行，其余请求由权限节点动态决定
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
-//        httpSecurity.cors().and()
-//                // 由于使用的是JWT，我们这里不需要csrf
-//                .csrf().disable()
-//                .logout().disable()
-//                // 使用 JWT，关闭session
-//                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-//                // 所有请求必须认证
-//                .and()
-//                .authorizeRequests()
-//                .anyRequest()
-//                // RBAC 动态 url 认证
-//                .access("@rbacauthorityservice.hasPermission(request,authentication)");
-//        // 无权访问 JSON 格式的数据
-//        httpSecurity.exceptionHandling().authenticationEntryPoint(jwtAuthenticationEntryPoint);
-//        httpSecurity.exceptionHandling().accessDeniedHandler(myAccessDeniedHandler);
-//        httpSecurity.authorizeRequests().withObjectPostProcessor(new ObjectPostProcessor<FilterSecurityInterceptor>() {
-//            @Override
-//            public <O extends FilterSecurityInterceptor> O postProcess(O o) {
-//                o.setSecurityMetadataSource(filterMetadataSource);
-//                o.setAccessDecisionManager(myAccessDecisionManager);
-//                return o;
-//            }
-//
-//        });
-//        //用重写的Filter替换掉原有的UsernamePasswordAuthenticationFilter实现使用json 数据也可以登陆
-////        httpSecurity.addFilterBefore(userJwtLoginFilter(),UsernamePasswordAuthenticationFilter.class);
-//        httpSecurity.addFilterAt(userJwtLoginFilter(), UsernamePasswordAuthenticationFilter.class);
-//        httpSecurity.addFilterAfter(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        httpSecurity
+                .cors(org.springframework.security.config.Customizer.withDefaults())
+                .csrf(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
+                .formLogin(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
+                .httpBasic(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
+                .logout(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
+                .requestCache(org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors.authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler(myAccessDeniedHandler))
+                .authorizeHttpRequests(requests -> requests
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/login").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/refresh").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/logout").authenticated()
+                        // Actuator：健康检查/信息/指标/Prometheus 抓取端点放行（生产建议置于内网或经反向代理鉴权保护）
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().access(rbacAuthorizationManager))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return httpSecurity.build();
     }
 }

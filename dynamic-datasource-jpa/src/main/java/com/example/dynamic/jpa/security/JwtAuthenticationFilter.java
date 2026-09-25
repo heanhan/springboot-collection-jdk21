@@ -3,6 +3,7 @@ package com.example.dynamic.jpa.security;
 import com.example.dynamic.jpa.common.util.JwtUtil;
 import com.example.dynamic.jpa.exception.ExceptionCode;
 import com.example.dynamic.jpa.exception.JwtException;
+import com.example.dynamic.jpa.security.token.TokenService;
 import com.example.dynamic.jpa.system.config.LoginInfoHolder;
 import com.example.dynamic.jpa.system.vo.LoginInfo;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -43,58 +44,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Resource
     private AuthenticationEntryPoint authenticationEntryPoint;
 
+    @Resource
+    private JwtUtil jwtUtil;
+
+    @Resource
+    private TokenService tokenService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) throws IOException, ServletException {
-        String tokenHeader = request.getHeader(JwtUtil.TOKEN_HEADER);
-        // 如果请求头中没有Authorization信息则直接放行了
-        if (tokenHeader == null || StringUtils.isEmpty(tokenHeader)) {
-            if (request.getRequestURI().contains("/iosapp/")) {
-                //手机客户端请求的参数处理
-                String tenantId = request.getParameter("tenant_id");
-//                ServletInputStream inputStream = wrappedRequest.getInputStream();
-//                Object ioInput=inputStream;
-                request.setAttribute("tenant", tenantId);
-                filterChain.doFilter(request, response);
-                return;
-            }
-//            else {
-//                BodyReaderHttpServletRequestWrapper wrappedRequest = new BodyReaderHttpServletRequestWrapper(request);
-//                //针对ios设备的请求路径  不做json话处理
-////                String ContentType = request.getHeader("Content-Type");
-////                && (ContentType == null || ContentType.contains("application/json"))
-//                if (!request.getRequestURI().contains("/iosapp/") ) {
-//                    String body = wrappedRequest.getBodyStr();
-//                    if (StringUtils.isNotBlank(body)) {
-//                        JSONObject parse = JSONObject.parseObject(body);
-//                        //未处理的账号名 需要处理  如admin@aaa,@之前是账号，之后是租户
-//                        if (!ObjectUtils.isEmpty(parse)) {
-//                            if (parse.get("username") != null) {
-//                                String proUserName = parse.get("username").toString();
-//                                String tenant = proUserName.substring(proUserName.indexOf("@") + 1, proUserName.length());
-//                                String username = proUserName.substring(0, proUserName.indexOf("@"));
-//                                wrappedRequest.setAttribute("tenant", tenant);
-//                                wrappedRequest.setAttribute("username", username);
-//                            }
-//                        }
-//                    }
-//                }
-//                filterChain.doFilter(wrappedRequest, response);
-//                return;
-//            }
-        }
+        LoginInfoHolder.clear();
         try {
-            // 如果不是以指定字符串开头则直接返回失败
-            if (!tokenHeader.startsWith(JwtUtil.TOKEN_PREFIX)) {
-                throw new JwtException("token格式错误");
+            String header = request.getHeader(JwtUtil.TOKEN_HEADER);
+            if (StringUtils.isNotBlank(header)) {
+                try {
+                    if (!header.startsWith(JwtUtil.TOKEN_PREFIX)) {
+                        throw new JwtException("token格式错误");
+                    }
+                    SecurityContextHolder.getContext().setAuthentication(getAuthentication(header));
+                } catch (org.springframework.security.core.AuthenticationException e) {
+                    SecurityContextHolder.clearContext();
+                    authenticationEntryPoint.commence(request, response, e);
+                    return;
+                }
             }
-            SecurityContextHolder.getContext().setAuthentication(getAuthentication(tokenHeader));
-
             filterChain.doFilter(request, response);
-        } catch (JwtException e) {
-            // token错误直接返回信息
-            log.error(e.getMessage(), JwtAuthenticationFilter.class);
+        } finally {
+            LoginInfoHolder.clear();
             SecurityContextHolder.clearContext();
-            this.authenticationEntryPoint.commence(request, response, e);
         }
     }
 
@@ -102,36 +78,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * 这里从token中获取用户信息
      */
     private UsernamePasswordAuthenticationToken getAuthentication(String tokenHeader) {
-        String token = tokenHeader.replace(JwtUtil.TOKEN_PREFIX, JwtUtil.EMPTY_STRING);
+        String token = tokenHeader.substring(JwtUtil.TOKEN_PREFIX.length());
         try {
-            String realusername=null;
-            String username=null;
-            username = JwtUtil.getTokenBody(token, JwtUtil.TOKEN_SECRET).getSubject();
-            if(username.contains("@")){
-                //真实账号
-                realusername=username.substring(0,username.indexOf("@"));
-                //租户
-            }else{
-                realusername=username;
-                LoginInfo loginInfo = LoginInfo.getLoginInfoByToken(token);
-                LoginInfoHolder.setTenant(loginInfo);
+            io.jsonwebtoken.Claims claims = jwtUtil.parseToken(token);
+            if (StringUtils.isBlank(claims.getSubject()) || claims.getExpiration() == null) {
+                throw new JwtException("token缺少必要信息");
             }
-            if (username != null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(realusername);
-                if (userDetails != null) {
-                    return new UsernamePasswordAuthenticationToken(realusername, null, userDetails.getAuthorities());
-                }
+            // 登出黑名单校验：已被拉黑的 access token 视为无效
+            if (tokenService.isBlacklisted(claims.getId())) {
+                throw new JwtException(ExceptionCode.TOKEN_ERROR.getCode(), ExceptionCode.TOKEN_ERROR.getMsg());
             }
+            UserDetails details = userDetailsService.loadUserByUsername(claims.getSubject());
+            new org.springframework.security.authentication.AccountStatusUserDetailsChecker().check(details);
+            if (!(details instanceof JwtUser jwtUser)
+                    || !(claims.get(JwtUtil.EXTEND_INFO) instanceof java.util.Map<?, ?> info)
+                    || !(info.get("userId") instanceof Number userId)
+                    || !(info.get("tenantId") instanceof Number tenantId)
+                    || !java.util.Objects.equals(userId.intValue(), jwtUser.getUser().getId())
+                    || !java.util.Objects.equals(tenantId.intValue(), jwtUser.getUser().getTenantId())) {
+                throw new JwtException("token身份与当前用户不匹配");
+            }
+            return new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities());
         } catch (ExpiredJwtException e) {
-            log.error(e.getMessage(), JwtAuthenticationFilter.class);
             throw new JwtException(ExceptionCode.TOKEN_EXPIRE.getCode(), ExceptionCode.TOKEN_EXPIRE.getMsg());
-        } catch (MalformedJwtException e) {
-            log.error(e.getMessage(), JwtAuthenticationFilter.class);
-            throw new JwtException(ExceptionCode.TOKEN_ERROR.getCode(), ExceptionCode.TOKEN_ERROR.getMsg());
-        } catch (Exception e) {
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
             throw new JwtException(ExceptionCode.TOKEN_ERROR.getCode(), ExceptionCode.TOKEN_ERROR.getMsg());
         }
-        return null;
     }
 
 }

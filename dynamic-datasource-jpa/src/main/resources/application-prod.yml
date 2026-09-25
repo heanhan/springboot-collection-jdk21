@@ -1,0 +1,124 @@
+# =============================================================================
+# 生产环境 profile（MySQL 8.0+）
+# 与 dev 的关键差异：
+#   1. 所有敏感信息（库口令、JWT、Redis 口令、加密密钥）经环境变量注入，不落库；
+#   2. JPA ddl-auto=none，schema 变更全部交由 Flyway 管理（避免共享 EMF 对系统库做 validate 时
+#      因租户专属表缺失而启动失败）；
+#   3. 开启租户库口令加密（Druid ConfigFilter RSA）与多实例路由广播（Redis Pub/Sub）；
+#   4. 关闭 Druid 监控台弱口令暴露，Actuator 仅开放必要端点。
+# =============================================================================
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # MySQL 8.0+ 推荐连接串：显式时区、utf8mb4、开启服务端 prepare 缓存
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/springboot-jpa?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=true&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    druid:
+      driver-class-name: ${spring.datasource.driver-class-name}
+      url: ${spring.datasource.url}
+      username: ${spring.datasource.username}
+      password: ${spring.datasource.password}
+      filter:
+        config:
+          # 系统库口令若为密文则由 ConfigFilter 解密；明文部署可置 false
+          enabled: ${DS_BASE_CRYPTO_ENABLED:false}
+        stat:
+          enabled: true
+      filters: stat,wall,slf4j
+      initial-size: 5
+      min-idle: 5
+      max-active: 50
+      max-wait: 60000
+      min-evictable-idle-time-millis: 300000
+      time-between-eviction-runs-millis: 60000
+      validation-query: SELECT 1
+      validation-query-timeout: 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      pool-prepared-statements: false
+      max-pool-prepared-statement-per-connection-size: -1
+      stat-view-servlet:
+        # 生产默认关闭 Druid 监控台，避免弱口令暴露；如需开启务必配置强口令并限制白名单
+        enabled: ${DRUID_STAT_VIEW_ENABLED:false}
+        allow: ${DRUID_STAT_VIEW_ALLOW:127.0.0.1}
+        login-username: ${DRUID_STAT_VIEW_USER:}
+        login-password: ${DRUID_STAT_VIEW_PWD:}
+        reset-enable: false
+      web-stat-filter:
+        enabled: false
+  # Redis：双 token 存储、access token 黑名单、多实例路由广播
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 32
+          max-wait: 3000ms
+          max-idle: 16
+          min-idle: 4
+  jpa:
+    open-in-view: false
+    # 生产禁用自动建表，schema 由 Flyway 统一管理
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  # Flyway：显式指向系统库（避开 router 数据源），仅迁移 sys_* 表
+  flyway:
+    enabled: true
+    url: ${FLYWAY_URL:${spring.datasource.url}}
+    user: ${FLYWAY_USER:${spring.datasource.username}}
+    password: ${FLYWAY_PASSWORD:${spring.datasource.password}}
+    locations: classpath:db/migration/system
+    table: flyway_schema_history
+    # 已有数据的系统库首次接入时基线化并跳过 V1；空库则应用 V1
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    out-of-order: false
+
+# 覆盖默认 profile 的 app 配置：生产开启加密与集群广播
+app:
+  token:
+    store: redis
+  datasource:
+    startup:
+      eager-register: ${TENANT_DS_EAGER:true}
+      fail-fast: ${TENANT_DS_FAIL_FAST:false}
+    tenant-pool:
+      initial-size: ${TENANT_DS_INIT_SIZE:0}
+      min-idle: ${TENANT_DS_MIN_IDLE:0}
+      max-active: ${TENANT_DS_MAX_ACTIVE:8}
+      max-wait: ${TENANT_DS_MAX_WAIT:10000}
+    crypto:
+      # 生产开启租户库口令加密；密钥对经环境变量注入，私钥仅管理侧持有
+      enabled: ${DS_CRYPTO_ENABLED:true}
+      public-key: ${DS_CRYPTO_PUBLIC_KEY:}
+      private-key: ${DS_CRYPTO_PRIVATE_KEY:}
+    cluster-sync:
+      enabled: ${DS_CLUSTER_SYNC:true}
+      channel: ${DS_CLUSTER_SYNC_CHANNEL:dynjpa:datasource:changes}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_EXPOSE:health,info,metrics,prometheus}
+  endpoint:
+    health:
+      show-details: ${ACTUATOR_HEALTH_DETAILS:when_authorized}
+
+logging:
+  level:
+    root: info
+    sql: warn

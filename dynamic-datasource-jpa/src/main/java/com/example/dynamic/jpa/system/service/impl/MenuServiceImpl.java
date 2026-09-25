@@ -7,10 +7,12 @@ import com.example.dynamic.jpa.system.dao.MenuDao;
 import com.example.dynamic.jpa.system.entity.Menu;
 import com.example.dynamic.jpa.system.service.MenuService;
 import jakarta.annotation.Resource;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Date;
 import java.util.List;
 
 
@@ -31,14 +33,8 @@ public class MenuServiceImpl implements MenuService {
 
     @Override
     public List<Menu> listByPid(Integer parentId) {
-//        QueryWrapper<Menu> wrapper = new QueryWrapper<>();
-//        wrapper.lambda().eq(Menu::getIsDel, false);
-//        if (parentId == null) {
-//            parentId = SystemConstant.ROOT_PARENT_ID;
-//        }
-//        wrapper.lambda().eq(Menu::getParentId, parentId);
-//        wrapper.lambda().orderByAsc(Menu::getListOrder);
-        return null;
+        int pid = parentId == null ? SystemConstant.ROOT_PARENT_ID : parentId;
+        return menuDao.findAllByParentIdAndIsDelFalseOrderByListOrderAscIdAsc(pid);
     }
 
     @Override
@@ -50,45 +46,60 @@ public class MenuServiceImpl implements MenuService {
 
     @Override
     public List<Menu> listAll() {
-//        QueryWrapper<Menu> wrapper = new QueryWrapper<>();
-//        wrapper.lambda().eq(Menu::getIsDel, false);
-//        wrapper.lambda().orderByAsc(Menu::getListOrder);
-        List<Menu> all = menuDao.findAll();
-        return all;
+        return menuDao.findAllByIsDelFalseOrderByListOrderAscIdAsc();
     }
 
     @Override
     public Menu addMenu(Menu menu) {
+        Validate.notNull(menu, "菜单不能为空");
+        if (StringUtils.isBlank(menu.getName()) || StringUtils.isBlank(menu.getTitle())
+                || StringUtils.isBlank(menu.getMenuUrl())) {
+            throw new BaseException("菜单名称、标题和地址不能为空");
+        }
+        menu.setId(null);
         if (menu.getListOrder() == null) {
             menu.setListOrder(1);
         }
         if (menu.getParentId() == null) {
             menu.setParentId(SystemConstant.ROOT_PARENT_ID);
         }
-        Menu save = menuDao.save(menu);
-        return save;
+        menu.setIsDel(false);
+        menu.setCreateTime(new Date());
+        return menuDao.save(menu);
     }
 
     @Override
     public Menu getMenuById(Integer id) {
-//        QueryWrapper<Menu> wrapper = new QueryWrapper<>();
-//        wrapper.lambda().eq(Menu::getIsDel, false);
-//        wrapper.lambda().eq(Menu::getId, id);
-        Menu menu = menuDao.findById(id).get();
-        return menu;
+        return id == null ? null : menuDao.findByIdAndIsDelFalse(id).orElse(null);
     }
 
     @Override
     public Menu editMenu(Menu menu) {
         Validate.notNull(menu.getId(), "menu id 不允许为空");
-        Menu menuById = getMenuById(menu.getId());
-        if (menuById == null) {
+        Menu existing = getMenuById(menu.getId());
+        if (existing == null) {
             throw new BaseException("菜单不存在");
         }
-        if (menu.getParentId() == null) {
-            menu.setParentId(SystemConstant.ROOT_PARENT_ID);
+        if (StringUtils.isNotBlank(menu.getName())) {
+            existing.setName(menu.getName().trim());
         }
-        return menuDao.save(menu);
+        if (StringUtils.isNotBlank(menu.getTitle())) {
+            existing.setTitle(menu.getTitle().trim());
+        }
+        if (StringUtils.isNotBlank(menu.getMenuUrl())) {
+            existing.setMenuUrl(menu.getMenuUrl().trim());
+        }
+        if (menu.getParentId() != null) {
+            existing.setParentId(menu.getParentId());
+        }
+        if (menu.getListOrder() != null) {
+            existing.setListOrder(menu.getListOrder());
+        }
+        existing.setIcon(menu.getIcon());
+        existing.setType(menu.getType());
+        existing.setIsShow(menu.getIsShow());
+        existing.setUpdateTime(new Date());
+        return menuDao.save(existing);
     }
 
 
@@ -99,8 +110,12 @@ public class MenuServiceImpl implements MenuService {
         if (menu == null) {
             throw new BaseException(ExceptionCode.DELETE.getCode(), "菜单不存在");
         }
+        if (menuDao.existsByParentIdAndIsDelFalse(id)) {
+            throw new BaseException(ExceptionCode.DELETE.getCode(), "存在子菜单，不能删除");
+        }
         menu.setIsDel(true);
-        //todo 后续需要实现
+        menu.setUpdateTime(new Date());
+        menuDao.save(menu);
         return true;
     }
 

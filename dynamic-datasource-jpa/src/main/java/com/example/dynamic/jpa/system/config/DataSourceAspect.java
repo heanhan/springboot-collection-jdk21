@@ -35,43 +35,41 @@ public class DataSourceAspect {
 
     }
 
-    @Before("dataPointCut()")
-    public void before(JoinPoint joinPoint) {
-        //获取请求对象
-        ServletRequestAttributes requestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (requestAttributes == null) {
-            return;
-        }
-        HttpServletRequest request = requestAttributes.getRequest();
-        // 从token中解析用户信息
-        String token = request.getHeader(JwtUtil.TOKEN_HEADER);
-        LoginInfo loginInfo = LoginInfo.getLoginInfoByToken(token);
-        if (loginInfo == null) {
-            loginInfo = new LoginInfo();
-        }
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        Method method = signature.getMethod();
-        MyDataSource myDataSource = null;
-        //优先判断方法上的注解
-        if (method.isAnnotationPresent(MyDataSource.class)) {
-            myDataSource = method.getAnnotation(MyDataSource.class);
-        } else if (method.getDeclaringClass().isAnnotationPresent(MyDataSource.class)) {
-            //其次判断类上的注解
-            myDataSource = method.getDeclaringClass().getAnnotation(MyDataSource.class);
-        }
-        if (myDataSource != null) {
-            DataSourceType dataSourceType = myDataSource.type();
-            log.info("this is datasource: " + dataSourceType);
-            if (dataSourceType.equals(DataSourceType.TENANT)) {
-                loginInfo.setTenantId(myDataSource.value());
+    @org.aspectj.lang.annotation.Around("dataPointCut()")
+    public Object around(org.aspectj.lang.ProceedingJoinPoint joinPoint) throws Throwable {
+        LoginInfo previous = LoginInfoHolder.getTenant();
+        try {
+            var authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            LoginInfo loginInfo = authentication != null && authentication.isAuthenticated()
+                    && authentication.getPrincipal() instanceof com.example.dynamic.jpa.security.JwtUser user
+                    ? LoginInfo.fromUser(user.getUser()) : new LoginInfo();
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            Method method = org.springframework.aop.support.AopUtils.getMostSpecificMethod(
+                    signature.getMethod(), joinPoint.getTarget().getClass());
+            MyDataSource annotation = org.springframework.core.annotation.AnnotatedElementUtils
+                    .findMergedAnnotation(method, MyDataSource.class);
+            if (annotation == null) {
+                annotation = org.springframework.core.annotation.AnnotatedElementUtils
+                        .findMergedAnnotation(joinPoint.getTarget().getClass(), MyDataSource.class);
+            }
+            if (annotation != null && annotation.type() == DataSourceType.SYSTEM) {
+                loginInfo.setTenantId(0);
+            } else if (annotation != null && annotation.type() == DataSourceType.TENANT) {
+                Integer tenantId = loginInfo.getTenantId();
+                if (tenantId == null || tenantId <= 0
+                        || (annotation.value() > 0 && annotation.value() != tenantId)) {
+                    throw new org.springframework.security.access.AccessDeniedException("无权访问该租户数据源");
+                }
+            }
+            LoginInfoHolder.setTenant(loginInfo);
+            return joinPoint.proceed();
+        } finally {
+            if (previous == null) {
+                LoginInfoHolder.clear();
+            } else {
+                LoginInfoHolder.setTenant(previous);
             }
         }
-        LoginInfoHolder.setTenant(loginInfo);
-
-    }
-
-    @After("dataPointCut()")
-    public void after(JoinPoint joinPoint) {
-        LoginInfoHolder.clear();
     }
 }

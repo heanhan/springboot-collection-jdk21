@@ -29,8 +29,8 @@ public class TenantData implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "tenant_id")
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false, unique = true)
+    private Integer tenantId;
 
     @Column(name = "url")
     private String url;
@@ -38,6 +38,8 @@ public class TenantData implements Serializable {
     @Column(name = "username")
     private String username;
 
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+    @lombok.ToString.Exclude
     @Column(name = "password")
     private String password;
 
@@ -45,7 +47,7 @@ public class TenantData implements Serializable {
      * 状态
      */
     @Column(name = "is_del")
-    private Boolean isDel;
+    private Boolean isDel = false;
 
     @Column(name = "create_time")
     private LocalDateTime createTime;

@@ -23,7 +23,6 @@ import java.io.IOException;
  *
  * @author zhaojh
  */
-@Component
 public class UserJwtLoginFilter extends UsernamePasswordAuthenticationFilter {
 
 //    @Resource
