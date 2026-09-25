@@ -32,17 +32,17 @@ public class DynamicDatabaseProperties {
 
     private int initialSize;
 
-    private int maxActive;
+    private int maxActive = 20;
 
-    private int maxWait;
+    private int maxWait = 60000;
 
     private int minIdle;
 
     private boolean poolPreparedStatements;
 
-    private int maxPoolPreparedStatementPerConnectionSize;
+    private int maxPoolPreparedStatementPerConnectionSize = -1;
 
-    private String validationQuery;
+    private String validationQuery = "SELECT 1";
 
     private boolean testOnBorrow;
 
@@ -50,11 +50,11 @@ public class DynamicDatabaseProperties {
 
     private boolean testWhileIdle;
 
-    private int timeBetweenEvictionRunsMillis;
+    private int timeBetweenEvictionRunsMillis = 60000;
 
     private String filters;
 
-    private int minEvictableIdleTimeMillis;
+    private int minEvictableIdleTimeMillis = 300000;
 
     /**
      * 获取租户的数据源默认配置

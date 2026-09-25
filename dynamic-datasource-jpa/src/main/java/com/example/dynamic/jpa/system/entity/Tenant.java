@@ -33,7 +33,7 @@ public class Tenant implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private String id;
+    private Integer id;
 
     @NotBlank(message = "tenantName不能为空")
     @Column(name = "tenant_name")
@@ -62,7 +62,7 @@ public class Tenant implements Serializable {
      * 状态
      */
     @Column(name = "is_del")
-    private Boolean isDel;
+    private Boolean isDel = false;
 
     @Column(name = "create_time")
     private LocalDateTime createTime;

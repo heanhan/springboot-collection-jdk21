@@ -62,7 +62,7 @@ public class JwtUser implements UserDetails {
      */
     @Override
     public boolean isAccountNonLocked() {
-        return UserStatus.LOCK.getValue() != user.getStatus();
+        return !java.util.Objects.equals(UserStatus.LOCK.getValue(), user.getStatus());
     }
 
     /**
@@ -78,7 +78,7 @@ public class JwtUser implements UserDetails {
      */
     @Override
     public boolean isEnabled() {
-        return true;
+        return java.util.Objects.equals(UserStatus.NORMAL.getValue(), user.getStatus());
     }
 
 }

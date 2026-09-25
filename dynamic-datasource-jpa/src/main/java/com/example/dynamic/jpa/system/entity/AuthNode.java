@@ -2,6 +2,7 @@ package com.example.dynamic.jpa.system.entity;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -26,6 +27,7 @@ import java.util.List;
  * @author zhaojh
  */
 @Data
+@Entity
 @EqualsAndHashCode(callSuper = false)
 @Table(name = "sys_auth_node")
 @DynamicInsert
@@ -58,6 +60,12 @@ public class AuthNode implements Serializable {
     @NotBlank(message = "path不能为空", groups = {Add.class})
     @Column(name = "path")
     private String path;
+
+    /**
+     * HTTP方法，为空表示匹配所有方法
+     */
+    @Column(name = "method")
+    private String method;
 
     /**
      * 排序

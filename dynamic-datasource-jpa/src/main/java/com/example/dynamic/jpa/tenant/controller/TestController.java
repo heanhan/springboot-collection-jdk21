@@ -26,28 +26,17 @@ import java.util.Map;
 @RequestMapping("/api/test")
 public class TestController {
 
-    @Resource(name = "multipleDataSource")
-    private DataSource dataSource;
-
-    private final DynamicDatabaseProperties dynamicDatabaseProperties;
-
     @Resource
     private TestService testService;
 
-    public TestController(DynamicDatabaseProperties dynamicDatabaseProperties) {
-        this.dynamicDatabaseProperties = dynamicDatabaseProperties;
-    }
-
-    @MyDataSource(type= DataSourceType.TENANT,value = 2)
+    @MyDataSource(type = DataSourceType.TENANT)
     @GetMapping("getTestById")
     public ResultBody getTestById(Integer id, Integer data) {
-        DynamicDataSource dynamicDataSource = (DynamicDataSource) dataSource;
-        Map<Object, DataSource> resolvedDataSources = dynamicDataSource.getResolvedDataSources();
-        LoginInfo loginInfo =new LoginInfo();
-        loginInfo.setTenantId(data);
-        LoginInfoHolder.setTenant(loginInfo);
+        LoginInfo loginInfo = LoginInfoHolder.getTenant();
+        if (loginInfo == null || (data != null && !data.equals(loginInfo.getTenantId()))) {
+            throw new org.springframework.security.access.AccessDeniedException("不能访问其他租户的数据");
+        }
         Test testById = testService.getTestById(id);
-        LoginInfoHolder.clear();
         return ResultBody.success(testById);
     }
 

@@ -23,15 +23,18 @@ import java.util.Map;
 @Component
 public class MyAuthenticationSuccessHandler implements AuthenticationSuccessHandler {
 
+    @jakarta.annotation.Resource
+    private JwtUtil jwtUtil;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication auth) throws IOException {
         JwtUser jwtUser = (JwtUser) auth.getPrincipal();
         User user = jwtUser.getUser();
-        LoginInfo loginInfo = new LoginInfo();
+        LoginInfo loginInfo = LoginInfo.fromUser(user);
 //        loginInfo.setUserId(user.getId());
 //        loginInfo.setTenantId(user.getTenantId());
-        String token = JwtUtil.createToken(jwtUser.getUsername(), JwtUtil.TOKEN_SECRET, loginInfo);
+        String token = jwtUtil.issueToken(jwtUser.getUsername(), loginInfo);
         Map<String, Object> map = new HashMap<>(7);
         map.put("userName", user.getUsername());
         map.put("realName", user.getNickname());

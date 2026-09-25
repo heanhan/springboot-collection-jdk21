@@ -32,7 +32,7 @@ import java.util.Properties;
  */
 @Slf4j
 @Configuration
-@EnableConfigurationProperties(value = DynamicDatabaseProperties.class)
+@EnableConfigurationProperties(value = {DynamicDatabaseProperties.class, TenantDataSourceProperties.class})
 @EnableTransactionManagement
  //设置Repository所在位置
 @EnableJpaRepositories(
@@ -43,6 +43,12 @@ public class DynamicDatabaseConfiguration {
 
     @Resource
     private DynamicDatabaseProperties dynamicDatabaseProperties;
+
+    @org.springframework.beans.factory.annotation.Value("${spring.jpa.hibernate.ddl-auto:update}")
+    private String ddlAuto;
+
+    @org.springframework.beans.factory.annotation.Value("${spring.jpa.show-sql:true}")
+    private boolean showSql;
 
     public DynamicDatabaseConfiguration(DynamicDatabaseProperties dynamicDatabaseProperties) {
         this.dynamicDatabaseProperties = dynamicDatabaseProperties;
@@ -115,10 +121,11 @@ public class DynamicDatabaseConfiguration {
     private Properties hibernateProperties() {
         Properties properties = new Properties();
         properties.put(org.hibernate.cfg.Environment.DIALECT,
-                "org.hibernate.dialect.MySQL5Dialect");
-        properties.put(org.hibernate.cfg.Environment.SHOW_SQL, true);
-        properties.put(org.hibernate.cfg.Environment.FORMAT_SQL, true);
-        properties.put(org.hibernate.cfg.Environment.HBM2DDL_AUTO, "update");
+                "org.hibernate.dialect.MySQLDialect");
+        properties.put(org.hibernate.cfg.Environment.SHOW_SQL, showSql);
+        properties.put(org.hibernate.cfg.Environment.FORMAT_SQL, showSql);
+        // 生产置 none（schema 由 Flyway 管理）；dev/test 默认 update 保持原有行为
+        properties.put(org.hibernate.cfg.Environment.HBM2DDL_AUTO, ddlAuto);
         return properties;
     }
 }

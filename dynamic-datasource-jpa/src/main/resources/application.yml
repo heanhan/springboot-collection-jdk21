@@ -7,3 +7,58 @@ spring:
     name: dynamic-datasource-jpa
   profiles:
     active: dev
+  jpa:
+    open-in-view: false
+  # Flyway 默认关闭，仅生产 profile 显式开启并指向系统库，避免 dev/test 误迁移
+  flyway:
+    enabled: false
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+# 双 token 机制配置
+app:
+  token:
+    # token 存储实现：redis=生产（需 Redis 可达），memory=内存（测试/无 Redis 降级）
+    store: ${TOKEN_STORE:redis}
+    # access token 有效期（分钟），短时降低泄露风险
+    access-ttl-minutes: ${TOKEN_ACCESS_TTL_MINUTES:30}
+    # refresh token 有效期（天）
+    refresh-ttl-days: ${TOKEN_REFRESH_TTL_DAYS:7}
+  datasource:
+    # 启动注册策略：eager-register=启动全量注册租户池；fail-fast=false 时单租户失败仅告警跳过（失败隔离），运行期按需懒加载
+    startup:
+      eager-register: ${TENANT_DS_EAGER:true}
+      fail-fast: ${TENANT_DS_FAIL_FAST:false}
+    # 租户连接池独立调优（小连接、懒建连），避免租户数增长导致连接资源爆炸
+    tenant-pool:
+      initial-size: ${TENANT_DS_INIT_SIZE:0}
+      min-idle: ${TENANT_DS_MIN_IDLE:0}
+      max-active: ${TENANT_DS_MAX_ACTIVE:8}
+      max-wait: ${TENANT_DS_MAX_WAIT:10000}
+    # 租户库连接密码加密（Druid ConfigFilter RSA）：enabled 时新增数据源密码用 private-key 加密入库，运行期 Druid 用 public-key 解密
+    crypto:
+      enabled: ${DS_CRYPTO_ENABLED:false}
+      public-key: ${DS_CRYPTO_PUBLIC_KEY:}
+      private-key: ${DS_CRYPTO_PRIVATE_KEY:}
+    # 多实例路由变更广播（Redis Pub/Sub）：新增/停用租户数据源后通知其它实例热更新路由表
+    cluster-sync:
+      enabled: ${DS_CLUSTER_SYNC:false}
+      channel: ${DS_CLUSTER_SYNC_CHANNEL:dynjpa:datasource:changes}
+
+# Actuator：租户数据源健康检查与指标
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${ACTUATOR_EXPOSE:health,info,metrics}
+  endpoint:
+    health:
+      show-details: ${ACTUATOR_HEALTH_DETAILS:when_authorized}
+      # 启用 k8s 存活/就绪探针分组：Redis 为可降级依赖，不纳入 liveness，避免其不可达导致实例被误杀
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,tenantDataSource

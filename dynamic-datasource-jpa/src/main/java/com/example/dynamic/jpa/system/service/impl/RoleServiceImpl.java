@@ -4,10 +4,13 @@ package com.example.dynamic.jpa.system.service.impl;
 import com.example.dynamic.jpa.common.constants.SystemConstant;
 import com.example.dynamic.jpa.common.util.RightsUtils;
 import com.example.dynamic.jpa.exception.BaseException;
+import com.example.dynamic.jpa.exception.ExceptionCode;
 import com.example.dynamic.jpa.system.dao.RoleDao;
+import com.example.dynamic.jpa.system.dao.UserDao;
 import com.example.dynamic.jpa.system.entity.AuthNode;
 import com.example.dynamic.jpa.system.entity.Menu;
 import com.example.dynamic.jpa.system.entity.Role;
+import com.example.dynamic.jpa.system.service.AuthNodeService;
 import com.example.dynamic.jpa.system.service.MenuService;
 import com.example.dynamic.jpa.system.service.RoleService;
 import jakarta.annotation.Resource;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigInteger;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,11 +43,17 @@ public class RoleServiceImpl implements RoleService {
     @Resource
     public RoleDao roleDao;
 
+    @Resource
+    private UserDao userDao;
+
+    @Resource
+    private AuthNodeService authNodeService;
+
 
 
     @Override
     public Role getAdminRole() {
-        return null;
+        return roleDao.findByRoleNameAndIsDelFalse(SystemConstant.ROLE_TENANT_ADMIN).orElse(null);
     }
 
     @Override
@@ -97,22 +107,47 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public List<AuthNode> listRoleAuthForTree(Integer roleId) {
-        return null;
+        return authNodeService.listAuthNodeTreeByRole(roleId);
     }
 
     @Override
     public List<Role> listRoles() {
-        return null;
+        return roleDao.findAllByIsDelFalseOrderByIdAsc();
     }
 
     @Override
     public boolean addRole(Role role) {
-        return false;
+        Validate.notNull(role, "角色不能为空");
+        if (StringUtils.isBlank(role.getRoleName())) {
+            throw new BaseException("角色名称不能为空");
+        }
+        role.setId(null);
+        role.setRoleName(role.getRoleName().trim());
+        if (roleDao.existsByRoleNameAndIsDelFalse(role.getRoleName())) {
+            throw new BaseException("角色名称已存在");
+        }
+        if (role.getParentId() == null) {
+            role.setParentId(SystemConstant.ROOT_PARENT_ID);
+        }
+        role.setIsDel(false);
+        role.setCreateTime(LocalDateTime.now());
+        roleDao.save(role);
+        return true;
     }
 
     @Override
     public boolean deleteRole(Integer roleId) {
-        return false;
+        Role role = getRoleById(roleId);
+        if (role == null) {
+            throw new BaseException(ExceptionCode.DELETE.getCode(), "角色不存在");
+        }
+        if (userDao.existsByRoleIdAndStatus(roleId, com.example.dynamic.jpa.common.enums.UserStatus.NORMAL.getValue())) {
+            throw new BaseException(ExceptionCode.DELETE.getCode(), "角色下仍有正常用户，不能删除");
+        }
+        role.setIsDel(true);
+        role.setUpdateTime(LocalDateTime.now());
+        roleDao.save(role);
+        return true;
     }
 
     /**
@@ -145,13 +180,31 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public boolean updateRole(Role role) {
-        return false;
+        Validate.notNull(role, "角色不能为空");
+        Role existing = getRoleById(role.getId());
+        if (existing == null) {
+            throw new BaseException(ExceptionCode.EDIT.getCode(), "角色不存在");
+        }
+        if (StringUtils.isNotBlank(role.getRoleName())) {
+            String roleName = role.getRoleName().trim();
+            if (roleDao.existsByRoleNameAndIdNotAndIsDelFalse(roleName, existing.getId())) {
+                throw new BaseException(ExceptionCode.EDIT.getCode(), "角色名称已存在");
+            }
+            existing.setRoleName(roleName);
+        }
+        existing.setDescription(role.getDescription());
+        existing.setMenuRights(role.getMenuRights());
+        existing.setNodeRights(role.getNodeRights());
+        existing.setParentId(role.getParentId() == null ? existing.getParentId() : role.getParentId());
+        existing.setType(role.getType());
+        existing.setUpdateTime(LocalDateTime.now());
+        roleDao.save(existing);
+        return true;
     }
 
     @Override
     public Role getRoleById(Integer roleId) {
-        //todo 需要重写
-        return roleDao.findById(roleId).get();
+        return roleId == null ? null : roleDao.findByIdAndIsDelFalse(roleId).orElse(null);
     }
 
 }

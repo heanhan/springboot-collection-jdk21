@@ -19,6 +19,18 @@ import java.sql.SQLException;
 @RestControllerAdvice
 public class ExceptionController {
 
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ResultBody authenticationException(org.springframework.security.core.AuthenticationException ex) {
+        return ResultBody.error(401, "认证失败，账号、密码或账户状态有误");
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.FORBIDDEN)
+    public ResultBody accessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
+        return ResultBody.error(403, "权限不足");
+    }
+
 
     /**
      * 参数校验错误
@@ -41,7 +53,7 @@ public class ExceptionController {
      * 数据操作处理异常
      */
     @ExceptionHandler({DataAccessException.class, SQLException.class})
-    public ResultBody handleDataAccessException(DataAccessException e) {
+    public ResultBody handleDataAccessException(Exception e) {
         log.error("数据库操作错误：", e);
         return ResultBody.error("操作异常");
     }
@@ -83,7 +95,7 @@ public class ExceptionController {
     }
 
     private HttpStatus getStatus(HttpServletRequest request) {
-        Integer statusCode = (Integer) request.getAttribute("javax.servlet.error.status_code");
+        Integer statusCode = (Integer) request.getAttribute("jakarta.servlet.error.status_code");
         if (statusCode == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
