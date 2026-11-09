@@ -5,12 +5,12 @@ import com.example.ddd.common.domain.valueobject.Address;
 import com.example.ddd.common.domain.valueobject.Money;
 import com.example.ddd.common.exception.BusinessException;
 import com.example.ddd.common.exception.ErrorCode;
-import com.example.ddd.contract.order.event.OrderCancelledEvent;
-import com.example.ddd.contract.order.event.OrderCompletedEvent;
-import com.example.ddd.contract.order.event.OrderCreatedEvent;
-import com.example.ddd.contract.order.event.OrderPaidEvent;
-import com.example.ddd.contract.order.event.OrderShippedEvent;
 import com.example.ddd.order.domain.model.entity.OrderItem;
+import com.example.ddd.order.domain.model.event.OrderCancelledDomainEvent;
+import com.example.ddd.order.domain.model.event.OrderCompletedDomainEvent;
+import com.example.ddd.order.domain.model.event.OrderCreatedDomainEvent;
+import com.example.ddd.order.domain.model.event.OrderPaidDomainEvent;
+import com.example.ddd.order.domain.model.event.OrderShippedDomainEvent;
 import com.example.ddd.order.domain.model.valueobject.OrderStatus;
 import com.example.ddd.order.domain.service.OrderPricingService.PricingResult;
 import com.example.ddd.order.domain.statemachine.OrderStateMachine;
@@ -37,8 +37,9 @@ import java.util.Objects;
  *
  * <p><b>生命周期：</b>CREATED → (PAID → SHIPPED → COMPLETED) | CANCELLED | (REFUNDING → REFUNDED)。</p>
  *
- * <p><b>事件收集：</b>每次状态变更通过 {@code registerEvent} 暂存"集成事件"（发布语言位于 ddd-api-contract），
- * 由应用服务在事务提交后统一发布，领域层本身不依赖 MQ。</p>
+ * <p><b>事件收集：</b>每次状态变更通过 {@code registerEvent} 暂存"领域事件"
+ * （领域内部语言，位于 {@code domain.model.event}），由应用服务在事务提交后统一发布，
+ * 基础设施层负责在出站边界翻译为 contract 集成事件——领域层既不依赖 MQ，也不依赖对外契约。</p>
  */
 public class Order extends BaseAggregateRoot {
 
@@ -69,7 +70,7 @@ public class Order extends BaseAggregateRoot {
     // ============================================================
 
     /**
-     * 创建订单（下单用例）。校验不变式并收集 {@link OrderCreatedEvent}。
+     * 创建订单（下单用例）。校验不变式并收集 {@link OrderCreatedDomainEvent}。
      *
      * @param pricing             由 {@code OrderPricingService} 计算好的金额结果
      * @param paymentTimeoutMinutes 支付超时分钟数，用于计算 expireAt
@@ -87,13 +88,13 @@ public class Order extends BaseAggregateRoot {
                 LocalDateTime.now(), LocalDateTime.now().plusMinutes(paymentTimeoutMinutes));
         order.status = OrderStatus.CREATED;
 
-        // 收集集成事件：订单已创建
-        List<OrderCreatedEvent.Item> eventItems = new ArrayList<>();
+        // 收集领域事件：订单已创建
+        List<OrderCreatedDomainEvent.Item> eventItems = new ArrayList<>();
         for (OrderItem item : items) {
-            eventItems.add(new OrderCreatedEvent.Item(item.getSkuId(), item.getSpuName(),
+            eventItems.add(new OrderCreatedDomainEvent.Item(item.getSkuId(), item.getSpuName(),
                     item.getQuantity(), item.getSubtotal().amount()));
         }
-        order.registerEvent(new OrderCreatedEvent(orderId, orderNo, userId,
+        order.registerEvent(new OrderCreatedDomainEvent(orderId, orderNo, userId,
                 pricing.payAmount().amount(), eventItems, order.expireAt));
         return order;
     }
@@ -148,7 +149,7 @@ public class Order extends BaseAggregateRoot {
     // ============================================================
 
     /**
-     * 支付成功：CREATED → PAID。收集 {@link OrderPaidEvent}。
+     * 支付成功：CREATED → PAID。收集 {@link OrderPaidDomainEvent}。
      */
     public void pay(String channel, String tradeNo, LocalDateTime paidTime) {
         OrderStateMachine.assertCanTransition(this.status, OrderStatus.PAID);
@@ -156,32 +157,32 @@ public class Order extends BaseAggregateRoot {
         this.paymentChannel = channel;
         this.paymentTradeNo = tradeNo;
         this.paidAt = paidTime == null ? LocalDateTime.now() : paidTime;
-        registerEvent(new OrderPaidEvent(orderId, orderNo, userId, payAmount.amount(),
+        registerEvent(new OrderPaidDomainEvent(orderId, orderNo, userId, payAmount.amount(),
                 channel, tradeNo, this.paidAt));
     }
 
     /**
-     * 发货：PAID → SHIPPED。收集 {@link OrderShippedEvent}。
+     * 发货：PAID → SHIPPED。收集 {@link OrderShippedDomainEvent}。
      */
     public void ship(String shipmentId, String carrier, String trackingNo, LocalDateTime shipTime) {
         OrderStateMachine.assertCanTransition(this.status, OrderStatus.SHIPPED);
         this.status = OrderStatus.SHIPPED;
         this.shippedAt = shipTime == null ? LocalDateTime.now() : shipTime;
-        registerEvent(new OrderShippedEvent(orderId, orderNo, userId, shipmentId, carrier, trackingNo, this.shippedAt));
+        registerEvent(new OrderShippedDomainEvent(orderId, orderNo, userId, shipmentId, carrier, trackingNo, this.shippedAt));
     }
 
     /**
-     * 确认收货：SHIPPED → COMPLETED。收集 {@link OrderCompletedEvent}。
+     * 确认收货：SHIPPED → COMPLETED。收集 {@link OrderCompletedDomainEvent}。
      */
     public void complete(LocalDateTime completeTime) {
         OrderStateMachine.assertCanTransition(this.status, OrderStatus.COMPLETED);
         this.status = OrderStatus.COMPLETED;
         this.completedAt = completeTime == null ? LocalDateTime.now() : completeTime;
-        registerEvent(new OrderCompletedEvent(orderId, orderNo, userId, this.completedAt));
+        registerEvent(new OrderCompletedDomainEvent(orderId, orderNo, userId, this.completedAt));
     }
 
     /**
-     * 取消：CREATED → CANCELLED。收集 {@link OrderCancelledEvent}。
+     * 取消：CREATED → CANCELLED。收集 {@link OrderCancelledDomainEvent}。
      *
      * @param reasonCode USER_CANCEL / TIMEOUT / PAY_FAILED / OUT_OF_STOCK
      */
@@ -190,7 +191,7 @@ public class Order extends BaseAggregateRoot {
         this.status = OrderStatus.CANCELLED;
         this.cancelReason = reasonCode + (reasonDesc == null ? "" : ":" + reasonDesc);
         this.cancelledAt = LocalDateTime.now();
-        registerEvent(new OrderCancelledEvent(orderId, orderNo, userId, reasonCode, reasonDesc));
+        registerEvent(new OrderCancelledDomainEvent(orderId, orderNo, userId, reasonCode, reasonDesc));
     }
 
     /**

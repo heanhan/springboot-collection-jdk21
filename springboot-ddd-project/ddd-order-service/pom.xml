@@ -45,6 +45,9 @@
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-loadbalancer</artifactId></dependency>
 
         <dependency><groupId>org.springdoc</groupId><artifactId>springdoc-openapi-starter-webmvc-ui</artifactId></dependency>
+
+        <!-- 架构守护：把 package-info 里的分层约定变成可执行的 CI 约束 -->
+        <dependency><groupId>com.tngtech.archunit</groupId><artifactId>archunit-junit5</artifactId><version>1.2.1</version><scope>test</scope></dependency>
     </dependencies>
 
     <build>
