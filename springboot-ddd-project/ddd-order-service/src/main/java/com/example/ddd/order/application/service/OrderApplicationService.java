@@ -219,6 +219,17 @@ public class OrderApplicationService {
         return orderRepository.findById(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
     }
 
+    /**
+     * 带归属校验的订单查询用例：“只有订单所有人可查看”是业务规则，
+     * 下沉到应用层统一执行，接口层不再重复判断（与 cancel/complete 的 assertOwner 同一模式）。
+     */
+    @Transactional(readOnly = true)
+    public Order getOwnedOrder(String orderId, String userId) {
+        Order order = getOrder(orderId);
+        assertOwner(order, userId);
+        return order;
+    }
+
     @Transactional(readOnly = true)
     public List<Order> listByUser(String userId, OrderStatus status, int pageNum, int pageSize) {
         return orderRepository.findByUser(userId, status, pageNum, pageSize);

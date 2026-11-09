@@ -10,6 +10,7 @@ import com.example.ddd.order.domain.model.valueobject.OrderStatus;
 import com.example.ddd.order.domain.service.OrderPricingService;
 import com.example.ddd.order.infrastructure.persistence.po.OrderPO;
 import com.example.ddd.order.infrastructure.persistence.repository.OrderRepositoryImpl;
+import com.example.ddd.order.infrastructure.mq.OrderIntegrationEventTranslator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +50,10 @@ class OrderPersistenceTest {
         @Bean ObjectMapper json() { return new ObjectMapper().findAndRegisterModules(); }
         @Bean OrderPricingService pricing() { return new OrderPricingService(); }
         @Bean DomainEventPublisher events(EventOutbox outbox) {
-            return event -> outbox.append("ddd-order-event:" + event.getClass().getSimpleName().replaceFirst("Event$", ""), event);
+            return event -> {
+                var integration = OrderIntegrationEventTranslator.translate(event);
+                outbox.append("ddd-order-event:" + integration.getClass().getSimpleName().replaceFirst("Event$", ""), integration);
+            };
         }
     }
     @Autowired OrderApplicationService service;

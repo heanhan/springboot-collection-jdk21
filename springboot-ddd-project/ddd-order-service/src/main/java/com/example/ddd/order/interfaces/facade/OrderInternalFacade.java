@@ -3,7 +3,7 @@ package com.example.ddd.order.interfaces.facade;
 import com.example.ddd.common.result.Result;
 import com.example.ddd.contract.order.OrderDTO;
 import com.example.ddd.order.application.service.OrderApplicationService;
-import com.example.ddd.order.interfaces.rest.OrderController;
+import com.example.ddd.order.interfaces.assembler.OrderAssembler;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -20,6 +20,6 @@ public class OrderInternalFacade {
 
     @GetMapping("/{orderId}")
     public Result<OrderDTO> get(@PathVariable String orderId) {
-        return Result.ok(OrderController.toDTO(service.getOrder(orderId)));
+        return Result.ok(OrderAssembler.toDTO(service.getOrder(orderId)));
     }
 }
