@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: springboot-agent-scope-travel
+
+travel:
+  agent:
+    api-key: qwertyuiop
+    base-url: http://127.0.0.1:8000/v1
+    model-name: Qwen3.5-4B-MLX-4bit
+    stream: true
+    temperature: 0.2
+    max-tokens: 2048
+    timeout-seconds: 180
+    state-directory: .agentscope-data/travel

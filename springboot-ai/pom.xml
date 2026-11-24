@@ -15,6 +15,7 @@
         <module>springboot-langchain4j</module>
         <module>springboot-spring-ai</module>
         <module>springboot-ai-alibaba-items</module>
+        <module>springboot-agent-scope</module>
     </modules>
 
     <properties>
