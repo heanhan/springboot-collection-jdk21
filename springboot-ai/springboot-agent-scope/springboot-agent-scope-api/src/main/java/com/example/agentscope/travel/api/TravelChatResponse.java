@@ -1,5 +1,8 @@
 package com.example.agentscope.travel.api;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 旅游问答接口的响应结果。
  */
@@ -30,6 +33,11 @@ public class TravelChatResponse {
      */
     private String notice;
 
+    /**
+     * 本次检索并提供给 Agent 的知识片段，顺序与答案中的引用编号一致。
+     */
+    private List<KnowledgeSearchResult> knowledgeSources = new ArrayList<KnowledgeSearchResult>();
+
     public TravelChatResponse() {
     }
 
@@ -38,12 +46,14 @@ public class TravelChatResponse {
             AgentType routedAgent,
             String routeReason,
             String answer,
-            String notice) {
+            String notice,
+            List<KnowledgeSearchResult> knowledgeSources) {
         this.sessionId = sessionId;
         this.routedAgent = routedAgent;
         this.routeReason = routeReason;
         this.answer = answer;
         this.notice = notice;
+        this.knowledgeSources = knowledgeSources;
     }
 
     public String getSessionId() {
@@ -84,5 +94,13 @@ public class TravelChatResponse {
 
     public void setNotice(String notice) {
         this.notice = notice;
+    }
+
+    public List<KnowledgeSearchResult> getKnowledgeSources() {
+        return knowledgeSources;
+    }
+
+    public void setKnowledgeSources(List<KnowledgeSearchResult> knowledgeSources) {
+        this.knowledgeSources = knowledgeSources;
     }
 }

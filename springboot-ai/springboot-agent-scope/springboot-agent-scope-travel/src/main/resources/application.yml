@@ -1,10 +1,20 @@
 spring:
   application:
     name: springboot-agent-scope-travel
+  datasource:
+    url: jdbc:mysql://172.16.75.105:3306/${MYSQL_DATABASE:travel_rag}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
 
 travel:
   agent:
-    api-key: qwertyuiop
+    api-key: ${OPENAI_API_KEY:}
     base-url: http://127.0.0.1:8000/v1
     model-name: Qwen3.5-4B-MLX-4bit
     stream: true
@@ -12,3 +22,13 @@ travel:
     max-tokens: 2048
     timeout-seconds: 180
     state-directory: .agentscope-data/travel
+
+  rag:
+    knowledge-pattern: classpath*:knowledge/travel/*.md
+    top-k: 3
+    vector:
+      url: ${PG_URL:jdbc:postgresql://172.16.75.106:5432/postgres}
+      username: ${PG_USER:postgres}
+      password: ${PG_PASSWORD:}
+      min-similarity: 0.15
+      candidate-limit: 20

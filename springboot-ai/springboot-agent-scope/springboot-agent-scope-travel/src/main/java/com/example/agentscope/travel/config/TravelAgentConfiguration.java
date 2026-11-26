@@ -19,7 +19,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(TravelAgentProperties.class)
+@EnableConfigurationProperties({TravelAgentProperties.class, TravelRagProperties.class})
 public class TravelAgentConfiguration {
 
     @Bean

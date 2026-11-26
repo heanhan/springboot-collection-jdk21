@@ -2,6 +2,8 @@
 
 本文说明当前旅游 Demo 的模块职责、六个 Agent 的协作方式、结构化输出、会话状态和异常兜底。
 
+> RAG 第 2 阶段已经完成：路由后执行 pgvector 检索，MySQL 正文回查后的材料进入专家和指南 Agent，最终响应返回可追溯的知识来源。当前使用 256 维特征哈希演示 Embedding，向量生成、检索算法和学习方法见 [RAG 学习指南](03-rag-learning-guide.md)。
+
 ## 1. 模块边界
 
 ```text
@@ -9,20 +11,35 @@ springboot-agent-scope-api
 ├── AgentType
 ├── RouteDecision
 ├── TravelChatRequest
-└── TravelChatResponse
+├── TravelChatResponse
+├── KnowledgeSearchRequest
+├── KnowledgeSearchResponse
+└── KnowledgeSearchResult
 
 springboot-agent-scope-travel
 ├── AgentScopeTravelApplication
 ├── controller
-│   └── TravelChatController
+│   ├── TravelChatController
+│   └── TravelKnowledgeController
 ├── service
 │   └── TravelGuideService
 ├── agent
 │   ├── TravelAgentPrompts
 │   └── TravelAgentTeam
+├── rag
+│   ├── TravelKnowledgeService
+│   │   启动时同步 MySQL 正文并同步 pgvector 向量
+│   ├── TravelEmbeddingService
+│   ├── DemoFeatureHashEmbeddingService
+│   ├── TravelVectorRepository
+│   ├── TravelKnowledgeChunk
+│   └── TravelKnowledgeChunkRepository
 └── config
     ├── TravelAgentConfiguration
-    └── TravelAgentProperties
+    ├── TravelAgentProperties
+    ├── TravelRagProperties
+    ├── TravelVectorConfiguration
+    └── TravelVectorProperties
 ```
 
 API 模块不依赖 AgentScope，只负责公共数据结构。Travel 模块负责模型接入、Agent 创建、状态存储和 HTTP 业务编排。
@@ -61,19 +78,39 @@ travel-router
   ▼
 TravelGuideService
   │
-  │ 2. specialists.get(targetAgent).call(specialistInput, specialistContext)
+  │ 2. knowledgeService.search(message)
   ▼
-对应专家 Agent
+TravelKnowledgeService
   │
-  │ 返回专业材料
+  │ 1. 当前问题生成查询向量
+  │ 2. pgvector 按余弦距离取候选
+  │ 3. 相似度阈值过滤
+  │ 4. 按 chunk_id 从 MySQL 批量读取正文
+  │ 5. 保持向量顺序，每来源最多 2 个，截取 Top-K
+  │
+  └── 返回带稳定顺序和相似度百分比的知识片段
   ▼
 TravelGuideService
   │
-  │ 3. guide.call(guideInput, guideContext)
+  │ 3. specialists.get(targetAgent).call(specialistInput, specialistContext)
+  │   输入包含 [1]、[2] 等编号的检索材料
+  ▼
+对应专家 Agent
+  │
+  │ 返回带引用的专业材料
+  ▼
+TravelGuideService
+  │
+  │ 4. guide.call(guideInput, guideContext)
+  │   输入同时包含专家材料和检索材料
   ▼
 travel-guide
   │
-  │ 返回最终答案
+  │ 返回保留引用的最终答案
+  ▼
+TravelGuideService
+  │
+  │ 5. 统一追加知识来源，组装 knowledgeSources
   ▼
 TravelChatResponse
 ```
@@ -103,7 +140,13 @@ agents.getRouter()
 
 如果模型没有返回有效结构化结果，服务会记录警告并转交 `GENERAL` 专家。
 
-### 第三步：专家回答
+### 第三步：知识检索
+
+服务只把用户当前问题作为检索查询，不拼接路由理由。路由理由中的“不属于旅游、美食或预算”等否定描述会污染查询，因此不参与检索；专家仍可通过自己的会话历史理解多轮追问。
+
+`TravelKnowledgeService` 使用当前唯一的 `TravelEmbeddingService` Bean 生成查询向量，由 `TravelVectorRepository` 在 pgvector 中按 `embedding <=> CAST(? AS vector)` 取回余弦距离候选。应用层按 `similarity = 1 - distance` 计算相似度，先用 `travel.rag.vector.min-similarity` 过滤，再从 MySQL `findAllById` 批量取回正文，按向量顺序保留每来源最多 2 个片段并截取 Top-K。服务为返回片段分配 `[1]`、`[2]` 等顺序编号，`score` 先将相似度限制在 0–1，再四舍五入为 0–100 的相似度百分比。没有命中时，会向 Agent 明确说明未检索到项目内置知识。
+
+### 第四步：专家回答
 
 服务根据 `targetAgent` 从 `TravelAgentTeam#getSpecialists` 中取得对应 Agent。
 
@@ -112,12 +155,14 @@ agents.getRouter()
 - 当前日期。
 - 用户当前问题。
 - 路由阶段保留的上下文。
+- 带统一编号的检索知识。
+- 优先依据知识回答并保留引用编号的要求。
 - 保持目的地、天数、人数不变的硬性要求。
 - 不得编造实时天气、价格或政策的限制。
 
 如果专家没有返回有效文本，服务抛出 HTTP 502。
 
-### 第四步：指南整理
+### 第五步：指南整理与来源返回
 
 指南 Agent 接收：
 
@@ -125,8 +170,11 @@ agents.getRouter()
 - 路由上下文。
 - 本次接洽的专家类型。
 - 专家生成的完整材料。
+- 与专家材料编号一致的检索知识。
 
-指南 Agent 只负责统一结构和表达，不负责新增专家材料之外的事实。如果指南 Agent 返回空内容，服务会退回到专家原始回答。
+指南 Agent 只负责统一结构和表达，不负责新增专家材料之外的事实，并被要求保留知识引用编号。如果指南 Agent 返回空内容，服务会退回到专家原始回答。
+
+最后，程序在答案末尾统一追加“知识来源”章节，并把同一组片段按原顺序写入 `TravelChatResponse.knowledgeSources`。这样即使模型漏写正文引用，响应中的来源仍不会丢失。
 
 ## 4. 会话状态
 
@@ -181,28 +229,63 @@ travel-guide-chengdu-001
 
 `TravelAgentProperties` 使用 `@ConfigurationProperties` 绑定 `travel.agent` 前缀，并通过 `@Validated` 校验密钥、温度、Token 数和超时时间。
 
-## 6. 兜底策略
+`TravelVectorProperties` 绑定 `travel.rag.vector`，通过 `@Validated` 校验 PostgreSQL 地址、用户名和必填密码。`TravelVectorConfiguration` 为该前缀创建独立的 PostgreSQL `JdbcTemplate`，不会替换 Spring Data JPA 的 MySQL 数据源。当前相似度阈值为 `0.15`，候选上限为 `20`。
+
+## 6. MySQL 与 pgvector 的分工
+
+当前两个数据库都参与应用运行链路：
+
+| 数据库 | 保存内容 | 使用方式 |
+| --- | --- | --- |
+| MySQL 8 | `travel_knowledge_chunk` 中的 19 个知识片段及后续业务数据 | Spring Data JPA；启动同步正文，检索时按 ID 批量回查 |
+| PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 中的 19 条向量 | 独立 JDBC；自动建表、模型版本标记、幂等 upsert、HNSW 余弦检索 |
+
+两库通过 `chunk_id` 在应用层关联，不设置跨数据库外键。向量记录缺失或对应 MySQL 正文不存在时，该候选会被跳过。
+
+启动过程：
+
+1. `TravelVectorRepository` 首次启动自动执行 `CREATE EXTENSION IF NOT EXISTS vector`、创建 `travel_knowledge_embedding` 表、`model_name` 普通索引和 HNSW `vector_cosine_ops` 索引。
+2. `TravelKnowledgeService` 读取 `knowledge/travel/*.md` 并分块。
+3. 根据稳定片段 ID 查询 MySQL；不存在时插入，标题、来源或正文变化时更新，不变时跳过。
+4. 从 MySQL 读取全部片段，对“标题 + 换行 + 正文”计算 SHA-256 `content_hash`。
+5. 按 `chunk_id + content_hash + model_name` 判断向量是否最新；缺失或变化时调用同一个 Embedding Bean，并以 `ON CONFLICT (chunk_id)` 幂等写入 pgvector。
+6. 问答时生成查询向量，只检索当前 `model_name` 的候选，经阈值、正文回查、来源限制后返回 Top-K。
+
+PostgreSQL 账号必须能创建扩展、表和索引，并读写向量表；pgvector 扩展文件必须已安装到数据库服务器。已有向量表不会随 Embedding 维度自动变更，应用也不会自动删表；启动时若检测到维度不一致，会明确失败并要求人工备份、重建向量表。
+
+当前 `DemoFeatureHashEmbeddingService` 先转小写并过滤“推荐、当地、怎么、如何”等泛化短语，再使用 SHA-256 特征哈希、中文二元词和英文词生成 256 维 L2 归一化向量，模型标记为 `demo-feature-hash-v3`。它只验证工程链路，不具备真正的语义理解。真实模型替换时必须保证文档向量与查询向量使用同一实现和模型版本。
+
+## 7. 兜底策略
 
 | 场景 | 当前处理 |
 | --- | --- |
 | 路由结果为空或缺少 `targetAgent` | 转交 `GENERAL` 专家 |
 | 路由理由为空 | 使用专家类型对应的默认理由 |
+| 未检索到知识 | 专家收到明确提示，不生成知识引用；响应来源为空数组 |
 | 专家回答为空 | 返回 HTTP 502 |
-| 指南回答为空 | 使用专家回答作为最终答案 |
+| 指南回答为空 | 使用专家回答作为最终答案，仍保留知识来源 |
 | 模型调用超时 | Reactor `block(timeout)` 抛出异常，由 Spring 默认错误处理返回 |
 
 所有成功响应都会附带提醒：本地模型没有实时查询交通、票价、天气或营业信息，出行前需要通过官方渠道核实。
 
-## 7. 为什么使用 ReActAgent
+## 8. 为什么使用 ReActAgent
 
 当前示例使用 `ReActAgent`，即使没有注册工具，也可以复用 AgentScope 的标准消息、模型调用、状态和结构化输出机制。
 
 未来接入工具时，可以在现有 Agent 上注册 `Toolkit` 工具，让 Agent 根据模型判断是否调用天气、地图或搜索能力。当前版本的空 `Toolkit` 表示不会执行任何外部工具。
 
-## 8. 关键源码入口
+## 9. 关键源码入口
 
 - [TravelAgentConfiguration.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelAgentConfiguration.java)
 - [TravelAgentPrompts.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/agent/TravelAgentPrompts.java)
 - [TravelGuideService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/service/TravelGuideService.java)
+- [TravelKnowledgeService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelKnowledgeService.java)
+- [TravelEmbeddingService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelEmbeddingService.java)
+- [DemoFeatureHashEmbeddingService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/DemoFeatureHashEmbeddingService.java)
+- [TravelVectorRepository.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelVectorRepository.java)
 - [TravelChatController.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/controller/TravelChatController.java)
+- [TravelKnowledgeController.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/controller/TravelKnowledgeController.java)
 - [TravelAgentProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelAgentProperties.java)
+- [TravelRagProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelRagProperties.java)
+- [TravelVectorConfiguration.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelVectorConfiguration.java)
+- [TravelVectorProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelVectorProperties.java)
