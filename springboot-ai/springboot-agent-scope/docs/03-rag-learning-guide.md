@@ -12,7 +12,7 @@ RAG 是 Retrieval-Augmented Generation 的缩写：
 2. **Augmented（增强）**：把检索片段作为额外上下文放入提示词。
 3. **Generation（生成）**：模型基于问题和检索资料生成回答。
 
-当前实现采用应用层 RAG：Java 服务先从 pgvector 找到候选，再从 MySQL 取回正文，最后把材料放进普通 `ReActAgent` 的输入，而不是让 Agent 自主调用向量检索工具。项目明确选择 **应用层 JDBC + pgvector**，不使用 AgentScope Java 的内存 Store 作为当前存储，也不混用 Python 文档方案。
+当前实现采用应用层 RAG：Java 服务先从 pgvector 找到候选，再从 MySQL 取回正文，最后把材料放进 `HarnessAgent` 的输入，而不是让 Agent 自主调用向量检索工具。项目明确选择 **应用层 JDBC + pgvector**，不使用 AgentScope Java 的内存 Store 作为当前存储，也不混用 Python 文档方案。
 
 ## 2. 当前检索架构
 
@@ -70,7 +70,7 @@ MySQL findAllById，按 chunk_id 批量取回正文
 | MySQL `travel_knowledge_chunk` | 保存标题、来源、正文和时间戳 | Spring Data JPA |
 | PostgreSQL `travel_knowledge_embedding` | 保存向量、`chunk_id`、模型标记、内容哈希和嵌入时间 | 独立 `JdbcTemplate` + pgvector |
 
-两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 20 个单元测试全部通过，真实库已验证 19 条唯一 256 维 `demo-feature-hash-v3` 向量、普通索引和 HNSW 索引，重复启动不会重复生成未变化向量。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。
+两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 25 个单元测试全部通过，真实库已验证 19 条唯一 256 维 `demo-feature-hash-v3` 向量、普通索引和 HNSW 索引，重复启动不会重复生成未变化向量。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。
 
 ## 3. 知识文件
 
@@ -437,6 +437,12 @@ LIMIT 20;
 ```
 
 专家 Agent 收到要求：优先依据知识回答，并在相关事实后保留 `[1]`、`[2]` 编号；没有命中时明确说明，不能把模型常识说成知识库内容。指南 Agent 同时收到专家材料和检索知识，并被要求保留这些编号。
+
+### 长期记忆与 RAG 的边界
+
+RAG 材料来自项目公共旅游知识库，使用 `[1]`、`[2]` 等编号标注；长期记忆来自当前用户过去明确表达的信息，例如舒缓节奏、住宿偏好和旅行约束，不属于检索知识，也不能添加知识引用编号。服务会把 `MEMORY.md` 作为独立段落提供给专家和指南 Agent，并要求描述记忆的句子禁止出现引用编号，混合内容必须拆句。
+
+当前用户消息中的明确条件优先于历史记忆。模型不得用旧偏好改写用户本轮给出的目的地、天数、人数或预算，也不得把专家攻略、模型假设或 RAG 内容写入用户长期记忆。两层记忆的配置和验证方法见 [长期记忆学习指南](04-long-term-memory-guide.md)。
 
 ### 最终响应如何返回来源
 

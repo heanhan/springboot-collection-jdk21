@@ -113,8 +113,9 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 
 - 一个共享的 `OpenAIChatModel`。
 - 一个共享的 `JsonFileAgentStateStore`。
-- 六个 `ReActAgent`。
-- 每个 Agent 的名称、提示词、最大迭代次数和空 `Toolkit`。
+- 六个 `HarnessAgent`。
+- 每个 Agent 的名称、提示词、最大迭代次数和用户隔离的记忆工作区。
+- 仅保留记忆读取与会话召回工具，不暴露主动保存、文件、Shell、Web、子 Agent 和 Skills 能力。
 
 ### 第四层：业务编排
 
@@ -205,7 +206,9 @@ specialists.put(AgentType.HOTEL, createAgent(
         TravelAgentPrompts.HOTEL,
         model,
         stateStore,
-        4));
+        properties.getMemoryWorkspaceDirectory(),
+        4,
+        false));
 ```
 
 ### 步骤四：更新路由提示词
@@ -241,7 +244,8 @@ specialists.put(AgentType.HOTEL, createAgent(
 | `travel.agent.max-tokens` | 回答被截断时适当增加 |
 | `travel.agent.timeout-seconds` | 本地模型较慢时适当增加 |
 | `travel.agent.stream` | 控制 Chat 模型内部生成方式，不代表 HTTP SSE |
-| `travel.agent.state-directory` | 需要隔离不同环境时修改目录 |
+| `travel.agent.state-directory` | 会话状态保存目录，需要隔离不同环境时修改 |
+| `travel.agent.memory-workspace-directory` | 长期记忆工作区，默认 `.agentscope-data/travel-memory` |
 | `travel.rag.knowledge-pattern` | Markdown 初始化素材的匹配规则 |
 | `travel.rag.top-k` | 默认返回片段数量，范围 1 到 10 |
 | `travel.rag.vector.url` | PostgreSQL JDBC 地址，可通过 `PG_URL` 覆盖 |
@@ -283,7 +287,7 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 应用只创建不存在的表和索引，不提供自动删表或自动迁移向量维度的功能。启动时若检测到现有向量维度与当前实现不一致，会明确失败并提示人工备份、重建，不会继续写入。MySQL 的 `travel_knowledge_chunk` 正文不受影响，不需要随之删除。
 
-## 6. 会话与状态调试
+## 6. 会话、长期记忆与隔离调试
 
 每次请求都需要传入 `sessionId`：
 
@@ -294,19 +298,31 @@ TRUNCATE TABLE travel_knowledge_embedding;
 }
 ```
 
+会话状态和长期记忆是两套机制：
+
+| 机制 | 保存位置 | 生命周期 |
+| --- | --- | --- |
+| Agent 会话状态 | `.agentscope-data/travel` | 同一 `sessionId` 内保留路由、专家和指南上下文 |
+| 每日记忆日志 | `.agentscope-data/travel-memory/<userId>/memory/YYYY-MM-DD.md` | Guide 调用结束后异步追加 |
+| 整理后的长期记忆 | `.agentscope-data/travel-memory/<userId>/MEMORY.md` | LLM 定期合并、去重，同一用户跨会话共享 |
+
 排查上下文问题时：
 
 1. 多轮请求必须使用同一个 `sessionId`。
 2. 检查 `.agentscope-data/travel` 是否产生状态文件。
 3. 区分路由、专家和指南各自的会话上下文。
 4. 如果切换了专家类型，专家会话也会变化，这是当前设计。
-5. 需要重新开始时使用新的 `sessionId`，或清理对应本地状态。
+5. 跨会话验证偏好时，第一次请求返回后要等待或轮询每日日志和 `MEMORY.md`；记忆 hooks 是异步的，不能立即断言。
+6. 如果首次只生成每日日志，检查 `Memory repair consolidation failed` 或等待超时日志；当前服务会在后台任务静默后按水印补偿整理。
+7. 检查每日日志是否只包含 `Memory Flush` 段落；当前已移除 `memory_save`，不应出现 `Memory Save` 重复写入。
+8. 同一用户不同 `sessionId` 应看到同一份 `MEMORY.md`；不同 `userId` 应位于不同目录。
+9. 需要重新开始时使用新的 `sessionId`，或清理对应本地状态；清理长期记忆会影响该用户所有会话，需谨慎操作。
 
-当前用户 ID 固定为 `local-demo-user`，不要把它当作完整的用户认证方案。
+当前 HTTP 用户 ID 固定为 `local-demo-user`，不要把它当作完整的用户认证方案。工作区已经支持按 `userId` 隔离，但正式接入时必须从认证上下文获取用户 ID，不能接受请求体随意传入的身份。完整说明见 [长期记忆学习指南](04-long-term-memory-guide.md)。
 
 ## 7. 接入实时工具
 
-当前所有 Agent 都使用空 `Toolkit`，不会调用外部工具。
+当前 Agent 只保留记忆读取与会话召回工具，不提供天气、地图、搜索等外部工具。长期记忆由 Guide 的自动 hooks 写入，所有 Agent 都没有 `memory_save` 工具。
 
 未来可以按以下方向扩展：
 
@@ -385,7 +401,7 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 修改完成后至少验证：
 
-- [ ] Maven 干净打包成功，20 个单元测试全部通过。
+- [ ] Maven 干净打包成功，25 个单元测试全部通过。
 - [ ] 本地 Chat 模型列表可以访问。
 - [ ] MySQL `travel_knowledge_chunk` 中有 19 个知识片段。
 - [ ] PostgreSQL `travel_knowledge_embedding` 中有 19 条唯一 `chunk_id`，当前模型均为 256 维，普通索引和 HNSW 索引存在。
@@ -396,6 +412,11 @@ TRUNCATE TABLE travel_knowledge_embedding;
 - [ ] 预算问题路由到 `BUDGET`。
 - [ ] 不明确问题路由到 `GENERAL`。
 - [ ] 同一 `sessionId` 可以保留上下文。
+- [ ] Guide 自动生成每日记忆日志，且没有 `Memory Save` 重复段落。
+- [ ] 异步整理或补偿整理生成 `MEMORY.md` 和 `.consolidation_state`。
+- [ ] 同一用户不同 `sessionId` 可以召回同一偏好。
+- [ ] 描述长期记忆的句子不添加 RAG 引用编号。
+- [ ] 不同 `userId` 的记忆目录和真实模型回答互相隔离。
 - [ ] 非法 `sessionId` 返回 HTTP 400。
 - [ ] 响应包含 `notice` 实时信息提醒。
 - [ ] 命中知识的问答返回非空 `knowledgeSources`，答案末尾包含知识来源。

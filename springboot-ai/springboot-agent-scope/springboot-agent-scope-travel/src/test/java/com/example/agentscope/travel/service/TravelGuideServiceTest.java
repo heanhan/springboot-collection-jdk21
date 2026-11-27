@@ -10,10 +10,11 @@ import com.example.agentscope.travel.api.TravelChatRequest;
 import com.example.agentscope.travel.api.TravelChatResponse;
 import com.example.agentscope.travel.config.TravelAgentProperties;
 import com.example.agentscope.travel.rag.TravelKnowledgeService;
-import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.MemoryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,9 +31,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,13 +47,13 @@ import static org.mockito.Mockito.when;
 class TravelGuideServiceTest {
 
     @Mock
-    private ReActAgent router;
+    private HarnessAgent router;
 
     @Mock
-    private ReActAgent foodAgent;
+    private HarnessAgent foodAgent;
 
     @Mock
-    private ReActAgent guideAgent;
+    private HarnessAgent guideAgent;
 
     @Mock
     private TravelKnowledgeService knowledgeService;
@@ -64,13 +68,15 @@ class TravelGuideServiceTest {
                 guideAgent);
         TravelAgentProperties properties = new TravelAgentProperties();
         properties.setTimeoutSeconds(10);
-        travelGuideService = new TravelGuideService(team, knowledgeService, properties);
+        travelGuideService = spy(new TravelGuideService(
+                team, knowledgeService, properties, MemoryConfig.defaults()));
+        doNothing().when(travelGuideService).scheduleMemoryRepair(any(RuntimeContext.class));
 
         Msg routeMessage = mock(Msg.class);
         RouteDecision decision = new RouteDecision(AgentType.FOOD, "用户想了解成都美食。");
         when(routeMessage.hasStructuredData()).thenReturn(true);
         when(routeMessage.getStructuredData(RouteDecision.class)).thenReturn(decision);
-        when(router.call(anyString(), eq(RouteDecision.class), any(RuntimeContext.class)))
+        when(router.call(anyList(), eq(RouteDecision.class), any(RuntimeContext.class)))
                 .thenReturn(Mono.just(routeMessage));
     }
 
@@ -107,12 +113,14 @@ class TravelGuideServiceTest {
                 .contains("[1] 成都美食指南 - 代表性美食")
                 .contains("[2] 旅行安全 - 饮食卫生")
                 .contains("来源文件：chengdu-food.md")
-                .contains("采用某条知识时在对应句子后标注 [1]、[2] 等编号");
+                .contains("采用某条知识时在对应句子后标注 [1]、[2] 等编号")
+                .contains("用户长期记忆（个人上下文，禁止添加知识引用；当前用户消息优先）");
 
         ArgumentCaptor<String> guideInputCaptor = ArgumentCaptor.forClass(String.class);
         verify(guideAgent).call(guideInputCaptor.capture(), any(RuntimeContext.class));
         assertThat(guideInputCaptor.getValue())
                 .contains("引用要求：保留专家材料中的 [1]、[2] 等知识引用编号")
+                .contains("描述用户长期记忆的句子不得添加引用编号")
                 .contains("片段编号：travel-safety-1");
 
         assertThat(response.getKnowledgeSources()).containsExactlyElementsOf(sources);
@@ -122,6 +130,7 @@ class TravelGuideServiceTest {
                 .contains("### 知识来源")
                 .contains("- [1] `chengdu-food.md`")
                 .contains("- [2] `travel-safety.md`");
+        verify(travelGuideService).scheduleMemoryRepair(any(RuntimeContext.class));
     }
 
     @Test

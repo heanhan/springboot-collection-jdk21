@@ -1,6 +1,6 @@
 # 架构与调用流程
 
-本文说明当前旅游 Demo 的模块职责、六个 Agent 的协作方式、结构化输出、会话状态和异常兜底。
+本文说明当前旅游 Demo 的模块职责、六个 Agent 的协作方式、结构化输出、会话状态、长期记忆和异常兜底。
 
 > RAG 第 2 阶段已经完成：路由后执行 pgvector 检索，MySQL 正文回查后的材料进入专家和指南 Agent，最终响应返回可追溯的知识来源。当前使用 256 维特征哈希演示 Embedding，向量生成、检索算法和学习方法见 [RAG 学习指南](03-rag-learning-guide.md)。
 
@@ -55,7 +55,7 @@ API 模块不依赖 AgentScope，只负责公共数据结构。Travel 模块负�
 | `travel-general` | 处理不明确或无法归类的旅游问题 | 4 | Markdown 文本 |
 | `travel-guide` | 将专家材料整理为统一旅游指南 | 4 | Markdown 文本 |
 
-所有 Agent 都由 `TravelAgentConfiguration#createAgent` 创建，当前使用空的 `Toolkit`，因此不具备外部工具调用能力。
+所有 Agent 都由 `TravelAgentConfiguration#createAgent` 创建，当前使用 `HarnessAgent`。Toolkit 仅保留 `memory_search`、`memory_get`、`session_search`、`session_list`、`session_history` 五个记忆读取和会话召回工具；`memory_save`、`wait_async_results` 以及文件、Shell、Web、子 Agent 和 Skills 能力均已关闭。长期记忆统一由 Guide 的自动 hooks 写入。
 
 ## 3. 请求处理时序
 
@@ -70,7 +70,7 @@ TravelChatController
   ▼
 TravelGuideService#chat
   │
-  │ 1. router.call(message, RouteDecision.class, routerContext)
+  │ 1. router.call(List<Msg>, RouteDecision.class, routerContext)
   ▼
 travel-router
   │
@@ -126,8 +126,13 @@ TravelChatResponse
 `TravelGuideService` 调用：
 
 ```java
+List<Msg> routeMessages = Collections.singletonList(
+    Msg.builder()
+        .role(MsgRole.USER)
+        .textContent(request.getMessage())
+        .build());
 agents.getRouter()
-    .call(request.getMessage(), RouteDecision.class, routerContext)
+    .call(routeMessages, RouteDecision.class, routerContext)
     .block(timeout);
 ```
 
@@ -155,6 +160,7 @@ agents.getRouter()
 - 当前日期。
 - 用户当前问题。
 - 路由阶段保留的上下文。
+- 独立标注的 `MEMORY.md` 长期记忆，明确禁止添加知识引用。
 - 带统一编号的检索知识。
 - 优先依据知识回答并保留引用编号的要求。
 - 保持目的地、天数、人数不变的硬性要求。
@@ -169,10 +175,11 @@ agents.getRouter()
 - 用户当前问题。
 - 路由上下文。
 - 本次接洽的专家类型。
+- 独立标注的 `MEMORY.md` 长期记忆，当前用户消息优先。
 - 专家生成的完整材料。
 - 与专家材料编号一致的检索知识。
 
-指南 Agent 只负责统一结构和表达，不负责新增专家材料之外的事实，并被要求保留知识引用编号。如果指南 Agent 返回空内容，服务会退回到专家原始回答。
+指南 Agent 只负责统一结构和表达，不负责新增专家材料之外的事实，并被要求保留知识引用编号。描述用户长期记忆的句子不得添加引用编号，混合内容必须拆句。如果指南 Agent 返回空内容，服务会退回到专家原始回答。Guide 返回后，服务还会启动后台补偿整理，避免首次抽取与维护并发时漏生成 `MEMORY.md`。
 
 最后，程序在答案末尾统一追加“知识来源”章节，并把同一组片段按原顺序写入 `TravelChatResponse.knowledgeSources`。这样即使模型漏写正文引用，响应中的来源仍不会丢失。
 
@@ -209,7 +216,7 @@ travel-guide-chengdu-001
 
 这样可以避免路由 Agent 和专家 Agent 的上下文互相污染。`.agentscope-data/` 已加入 `.gitignore`，运行产生的状态文件不会提交到 Git。
 
-当前所有请求使用固定用户 ID `local-demo-user`，因此该 Demo 只适合本地学习，不具备真实多用户隔离能力。
+当前 HTTP 请求使用固定用户 ID `local-demo-user`，因此接口暂时没有真实多用户入口；Harness 工作区本身已按 `userId` 隔离。正式接入认证后，应从认证上下文取得用户 ID，不能信任请求体随意传入的 `userId`。
 
 ## 5. 模型与配置
 
@@ -268,11 +275,36 @@ PostgreSQL 账号必须能创建扩展、表和索引，并读写向量表；pgv
 
 所有成功响应都会附带提醒：本地模型没有实时查询交通、票价、天气或营业信息，出行前需要通过官方渠道核实。
 
-## 8. 为什么使用 ReActAgent
+## 8. HarnessAgent 与长期记忆
 
-当前示例使用 `ReActAgent`，即使没有注册工具，也可以复用 AgentScope 的标准消息、模型调用、状态和结构化输出机制。
+当前六个 Agent 都使用 AgentScope Java 2.0.4 的 `HarnessAgent`。选择它的主要原因是核心 `ReActAgent` 的旧长期记忆 API 已弃用，而 Harness 提供工作区隔离、两层长期记忆、会话召回和可关闭的中间件能力。
 
-未来接入工具时，可以在现有 Agent 上注册 `Toolkit` 工具，让 Agent 根据模型判断是否调用天气、地图或搜索能力。当前版本的空 `Toolkit` 表示不会执行任何外部工具。
+长期记忆分为两层：
+
+| 文件 | 职责 | 写入方 |
+| --- | --- | --- |
+| `memory/YYYY-MM-DD.md` | 每次 Guide 调用结束后异步追加的每日日志 | `MemoryFlushManager` |
+| `MEMORY.md` | LLM 定期合并、去重后的跨天记忆 | `MemoryConsolidator` |
+| `memory/.consolidation_state` | 最近一次成功整理的时间水印 | `MemoryConsolidator` |
+
+默认目录为：
+
+```text
+.agentscope-data/travel-memory/
+└── <userId>/
+    ├── MEMORY.md
+    └── memory/
+        ├── YYYY-MM-DD.md
+        └── .consolidation_state
+```
+
+`LocalFilesystemSpec.isolationScope(IsolationScope.USER)` 保证同一用户跨会话共享记忆，不同用户使用不同目录。路由和专家通过 `disableMemoryHooks()` 关闭自动写入，只读取记忆；只有 Guide 开启自动抽取和整理。所有 Agent 都移除了 `memory_save`，避免模型主动保存和自动 hooks 重复写入。
+
+记忆抽取和整理是异步的，当前 HTTP 请求不会等待文件写完。首次整理在首次符合条件时执行，`consolidationMinGap` 的 30 分钟是后续两次整理之间的最小间隔，不是首次延迟。由于 Harness 2.0.4 的首次抽取和维护可能并发，`TravelGuideService` 会等待后台任务静默后按水印补偿一次整理，避免维护先读到空日志。验证跨会话记忆时需要等待或轮询文件，不能请求返回后立即断言。
+
+旅游提示词要求只记录用户明确表达且未来可复用的偏好、约束、历史决策和必要事实；当前用户输入优先于历史记忆，密码、证件号、支付信息等敏感内容不进入长期记忆。长期记忆属于用户个人上下文，不是 RAG 公共知识，不能添加 `[1]`、`[2]` 等检索引用。
+
+详细配置、验证步骤和排障方法见 [长期记忆学习指南](04-long-term-memory-guide.md)。
 
 ## 9. 关键源码入口
 

@@ -61,6 +61,11 @@ public class TravelAgentProperties {
      */
     private Path stateDirectory = Paths.get(".agentscope-data/travel");
 
+    /**
+     * 长期记忆工作区目录。MEMORY.md 和每日记忆日志都会保存在这里。
+     */
+    private Path memoryWorkspaceDirectory = Paths.get(".agentscope-data/travel-memory");
+
     public TravelAgentProperties() {
     }
 
@@ -72,7 +77,8 @@ public class TravelAgentProperties {
             double temperature,
             int maxTokens,
             long timeoutSeconds,
-            Path stateDirectory) {
+            Path stateDirectory,
+            Path memoryWorkspaceDirectory) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.modelName = modelName;
@@ -81,6 +87,7 @@ public class TravelAgentProperties {
         this.maxTokens = maxTokens;
         this.timeoutSeconds = timeoutSeconds;
         this.stateDirectory = stateDirectory;
+        this.memoryWorkspaceDirectory = memoryWorkspaceDirectory;
     }
 
     public String getApiKey() {
@@ -145,5 +152,13 @@ public class TravelAgentProperties {
 
     public void setStateDirectory(Path stateDirectory) {
         this.stateDirectory = stateDirectory;
+    }
+
+    public Path getMemoryWorkspaceDirectory() {
+        return memoryWorkspaceDirectory;
+    }
+
+    public void setMemoryWorkspaceDirectory(Path memoryWorkspaceDirectory) {
+        this.memoryWorkspaceDirectory = memoryWorkspaceDirectory;
     }
 }

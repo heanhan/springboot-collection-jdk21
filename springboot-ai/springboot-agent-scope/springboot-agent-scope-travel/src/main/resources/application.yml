@@ -22,6 +22,7 @@ travel:
     max-tokens: 2048
     timeout-seconds: 180
     state-directory: .agentscope-data/travel
+    memory-workspace-directory: .agentscope-data/travel-memory
 
   rag:
     knowledge-pattern: classpath*:knowledge/travel/*.md

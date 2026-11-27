@@ -19,6 +19,7 @@
 | 模型接入 | OpenAI 兼容 Chat Completions API |
 | 本地模型示例 | `Qwen3.5-4B-MLX-4bit` |
 | Agent 状态存储 | `JsonFileAgentStateStore` |
+| 长期记忆 | AgentScope Harness 两层记忆，本地文件按用户隔离 |
 | 知识正文 | MySQL 8 + Spring Data JPA |
 | 向量存储与检索 | PostgreSQL 17.9 + pgvector 0.8.2，应用层 JDBC |
 | Embedding | `DemoFeatureHashEmbeddingService`，`demo-feature-hash-v3`，256 维；仅用于跑通链路 |
@@ -44,7 +45,8 @@ springboot-agent-scope
 └── docs
     ├── 01-architecture-and-flow.md
     ├── 02-development-guide.md
-    └── 03-rag-learning-guide.md
+    ├── 03-rag-learning-guide.md
+    └── 04-long-term-memory-guide.md
 ```
 
 ### API 模块
@@ -69,7 +71,7 @@ springboot-agent-scope
 - `TravelKnowledgeChunk`、`TravelKnowledgeChunkRepository`：通过 JPA 持久化旅游知识正文。
 - `TravelVectorRepository`：通过 JDBC 创建 pgvector 表和索引，幂等写入向量并执行余弦距离检索。
 - `TravelAgentConfiguration`：创建模型、状态存储和六个 Agent。
-- `TravelAgentPrompts`：集中管理六个 Agent 的提示词。
+- `TravelAgentPrompts`：集中管理六个 Agent 的提示词和旅游记忆抽取、整理规则。
 - `TravelAgentProperties`、`TravelRagProperties`、`TravelVectorProperties`：绑定模型、超时、状态目录和 RAG 配置。
 - `TravelVectorConfiguration`：创建独立于 MySQL JPA 数据源的 PostgreSQL `JdbcTemplate`。
 
@@ -106,7 +108,7 @@ TravelGuideService
 TravelChatResponse
 ```
 
-六个 Agent 共享同一个模型实例和状态存储，但使用不同的 Agent 名称、提示词和会话命名空间。
+六个 Agent 共享同一个模型实例和状态存储，但使用不同的 Agent 名称、提示词和会话命名空间。Guide 额外开启长期记忆自动抽取和整理，路由与专家只读取记忆；工作区按 `userId` 隔离，同一用户跨会话共享 `MEMORY.md` 和每日日志。
 
 ## 快速启动
 
@@ -143,6 +145,7 @@ curl http://127.0.0.1:8000/v1/models
 | `travel.agent.max-tokens` | 单次回答最大 Token 数 |
 | `travel.agent.timeout-seconds` | 单次 Agent 调用超时时间 |
 | `travel.agent.state-directory` | 会话状态保存目录 |
+| `travel.agent.memory-workspace-directory` | 长期记忆工作区，默认 `.agentscope-data/travel-memory` |
 | `travel.rag.knowledge-pattern` | 旅游知识文件匹配规则 |
 | `travel.rag.top-k` | 每次问答默认检索的片段数量 |
 | `travel.rag.vector.min-similarity` | 最低余弦相似度，当前为 `0.15`，范围 0 到 1 |
@@ -224,7 +227,7 @@ java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/tar
 
 启动同步时，应用对每个片段的“标题 + 正文”计算 `content_hash`，再按 `chunk_id + content_hash + model_name` 判断是否最新；缺失或变化时生成向量并通过 `ON CONFLICT (chunk_id)` 幂等更新。检索时只使用用户当前问题：query embed → pgvector 候选 → 相似度阈值过滤 → MySQL `findAllById` 批量取正文 → 按向量顺序输出 → 每来源最多 2 个 → Top-K。SQL 使用 `embedding <=> CAST(? AS vector)` 获取余弦距离，应用层按 `similarity = 1 - distance` 计算相似度，并将分数限制在 0–100。
 
-当前 20 个单元测试全部通过；真实库中存在 19 条唯一 `chunk_id`、均为 256 维的 `demo-feature-hash-v3` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
+当前 25 个单元测试全部通过；真实库中存在 19 条唯一 `chunk_id`、均为 256 维的 `demo-feature-hash-v3` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
 
 ## RAG 知识检索与引用
 
@@ -247,6 +250,20 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 旅游问答的 `answer` 会保留模型生成的 `[1]`、`[2]` 引用，并由程序统一追加“知识来源”章节；响应的 `knowledgeSources` 字段按相同顺序返回来源文件、标题和片段 ID。没有知识命中时，`knowledgeSources` 为空数组，提示词会要求专家明确说明未命中。
 
 详细加载、向量同步、相似度计算和数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md)。
+
+## 长期记忆
+
+项目使用 AgentScope Java 2.0.4 的 `HarnessAgent` 实现两层长期记忆：
+
+- `memory/YYYY-MM-DD.md`：Guide 每次调用结束后异步追加的每日日志。
+- `MEMORY.md`：LLM 定期合并、去重后的跨会话长期记忆。
+- `memory/.consolidation_state`：最近一次成功整理的时间水印。
+
+默认文件位于 `.agentscope-data/travel-memory/<userId>/`。同一用户跨 `sessionId` 共享记忆，不同用户目录隔离。路由和专家只读取记忆，只有 Guide 开启自动写入；所有 Agent 都移除了 `memory_save`，避免重复保存。
+
+记忆写入是异步的，当前请求不会等待文件落盘。Harness 首次抽取与维护可能并发，`TravelGuideService` 会等待后台任务静默后按水印补偿整理，避免漏生成 `MEMORY.md`。旅游提示词只保留用户明确表达的偏好、约束、历史决策和必要事实，当前输入优先于历史记忆，敏感信息不进入日志。服务会把长期记忆作为独立段落提供给专家和指南 Agent；长期记忆不是 RAG 公共知识，描述记忆的句子不得添加检索引用编号。
+
+配置、验证和排障步骤见 [长期记忆学习指南](docs/04-long-term-memory-guide.md)。
 
 ## 接口示例
 
@@ -352,9 +369,9 @@ curl -X POST http://localhost:8080/api/travel/chat \
 - 当前 256 维 Embedding 是特征哈希演示实现，不具备真正的语义理解；替换步骤见 [开发与扩展指南](docs/02-development-guide.md#替换为真实-embedding-模型)。
 - 检索由应用层执行，不是 Agent 自主调用 RAG 工具，也没有混用 AgentScope Java 的内存 Store 或 Python 文档方案。
 - 没有接入天气、地图、票价、搜索等实时工具。
-- 固定使用 `local-demo-user`，没有真实登录和用户隔离。
+- 工作区支持按 `userId` 隔离，但 HTTP 服务固定使用 `local-demo-user`，尚未接入真实登录和认证上下文。
 - 模型配置支持流式生成，但 HTTP 接口仍返回聚合后的 JSON。
-- 20 个单元测试已通过；真实数据库验证了 19 条唯一 256 维向量和两类索引，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回，但本地小模型的生成质量仍有限。
+- 25 个单元测试已通过；真实数据库验证了 19 条唯一 256 维向量和两类索引，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回、同一用户跨会话的长期记忆召回、首次补偿整理和不同 `userId` 的记忆隔离，但本地小模型的生成质量仍有限。
 - 本地小模型可能改变用户给出的天数、人数或生成不准确信息，回复中会附带核实提醒。
 
 ## 延伸阅读
@@ -362,4 +379,5 @@ curl -X POST http://localhost:8080/api/travel/chat \
 - [架构与调用流程](docs/01-architecture-and-flow.md)
 - [开发与扩展指南](docs/02-development-guide.md)
 - [RAG 旅游知识检索学习指南](docs/03-rag-learning-guide.md)
+- [长期记忆学习指南](docs/04-long-term-memory-guide.md)
 - [AgentScope Java 2.0 官方文档](https://java.agentscope.io/v2)
