@@ -2,7 +2,7 @@
 
 本文对应旅游多智能体项目已经完成的 RAG 链路：MySQL 保存知识正文，PostgreSQL + pgvector 保存向量，应用层完成 Embedding、候选检索、正文回查和来源引用。
 
-当前知识正文通过 **MySQL 8 + Spring Data JPA** 持久化，共 19 个片段；**PostgreSQL 17.9 + pgvector 0.8.2** 保存对应的 19 条向量，通过 `chunk_id` 关联。当前 Embedding 是 256 维特征哈希演示实现，只用于跑通链路，不具备真正的语义理解。
+当前知识正文通过 **MySQL 8 + Spring Data JPA** 持久化，共 19 个片段；**PostgreSQL 17.9 + pgvector 0.8.2** 保存对应的 19 条向量，通过 `chunk_id` 关联。当前默认使用 `Qwen3-Embedding-0.6B@1024` 真实 Embedding；旧的 256 维特征哈希实现仅在 `demo-embedding` Profile 下保留。
 
 ## 1. 什么是 RAG
 
@@ -31,7 +31,7 @@ src/main/resources/knowledge/travel/*.md
                 ├── 按 chunk_id + content_hash + model_name 判断是否最新
                 │
                 ▼
-   DemoFeatureHashEmbeddingService（demo-feature-hash-v3，256 维）
+   OpenAiCompatibleEmbeddingService（Qwen3-Embedding-0.6B@1024）
                 │
                 ▼
       TravelVectorRepository 幂等 upsert
@@ -70,7 +70,7 @@ MySQL findAllById，按 chunk_id 批量取回正文
 | MySQL `travel_knowledge_chunk` | 保存标题、来源、正文和时间戳 | Spring Data JPA |
 | PostgreSQL `travel_knowledge_embedding` | 保存向量、`chunk_id`、模型标记、内容哈希和嵌入时间 | 独立 `JdbcTemplate` + pgvector |
 
-两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 25 个单元测试全部通过，真实库已验证 19 条唯一 256 维 `demo-feature-hash-v3` 向量、普通索引和 HNSW 索引，重复启动不会重复生成未变化向量。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。
+两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 39 个单元测试全部通过，真实库已验证 19 条唯一 1024 维 `Qwen3-Embedding-0.6B@1024` 向量、普通索引和 HNSW 索引，重复启动同步数量为 0。美食、预算和安全查询能返回预期知识，无关问题返回空结果；真实 Chat 模型的美食问答保留了 `[1]`、`[2]`、`[3]` 引用并返回三条 `knowledgeSources`。
 
 ## 3. 知识文件
 
@@ -171,7 +171,7 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 
 `TravelKnowledgeChunk` 对应 MySQL `travel_knowledge_chunk` 表，包含 `id`、`title`、`source`、`content`、`created_at` 和 `updated_at`。同步时保留已有记录的创建时间，只更新内容变化的记录及其更新时间。
 
-PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model_name`、`content_hash` 和 `embedded_at`。当前模型标记为 `demo-feature-hash-v3`，向量列为 `VECTOR(256)`；`chunk_id` 是主键，`ON CONFLICT (chunk_id)` 保证重复启动和重复同步不会产生重复向量记录。
+PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model_name`、`content_hash` 和 `embedded_at`。当前模型标记为 `Qwen3-Embedding-0.6B@1024`，向量列为 `VECTOR(1024)`；`chunk_id` 是主键，`ON CONFLICT (chunk_id)` 保证重复启动和重复同步不会产生重复向量记录。旧的 256 维 `demo-feature-hash-v3` 数据保留在 `travel_knowledge_embedding_demo256_backup_20261127` 备份表中。
 
 示例：
 
@@ -185,26 +185,29 @@ PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model
 
 会生成一个标题为“成都美食指南 - 美食类型”的知识片段。
 
-## 6. 演示 Embedding 与相似度计算
+## 6. 真实 Embedding、相似度与阈值
 
-当前唯一实现是 `DemoFeatureHashEmbeddingService`：
+默认实现是 `OpenAiCompatibleEmbeddingService`：
 
 | 项目 | 当前值 |
 | --- | --- |
-| 模型标记 | `demo-feature-hash-v3` |
-| 向量维度 | 256 |
-| 特征来源 | 中文二元词、英文单词和数字 |
-| 哈希算法 | SHA-256 特征哈希 |
-| 归一化 | L2 归一化 |
+| 模型 | `Qwen3-Embedding-0.6B` |
+| 模型标记 | `Qwen3-Embedding-0.6B@1024` |
+| 向量维度 | 1024 |
+| 接口 | OpenAI 兼容 `POST {baseUrl}/embeddings` |
+| 请求字段 | `model`、`input`、`dimensions` |
+| 认证 | 服务要求认证时发送 `Authorization: Bearer ...` |
+| Profile | `!demo-embedding` |
 
 生成过程：
 
-1. 将文本转小写，并去掉“推荐、当地、怎么、如何、什么”等泛化问句短语，避免它们稀释主题词。
-2. 提取英文单词和数字，以及连续中文的相邻二字组合，并过滤常见噪声字。
-3. 每个词项通过 SHA-256 映射到两个带正负号的向量桶，减少偶然碰撞的影响。
-4. 对 256 维向量做 L2 归一化；极端情况下保证不返回零向量。
+1. `embedDocument` 直接发送“标题 + 换行 + 正文”，不添加查询指令。
+2. `embedQuery` 在用户当前问题前添加 Qwen3 检索指令：`Instruct: Given a web search query, retrieve relevant passages that answer the query`，随后拼接 `Query: {问题}`。
+3. 适配层要求响应包含 `index=0`，向量非空、维度与配置一致、每个值都是有限浮点数，且不是零向量。
+4. 对返回向量做 L2 归一化，保证不同文本可以使用统一的余弦距离比较。
+5. 模型标记加入维度，避免模型升级或维度变化后继续复用无法区分的旧记录。
 
-这是**假 Embedding**，没有经过语义模型训练，不能理解同义词、上下文或跨语言表达。它的用途是验证建表、写入、索引、距离查询和正文回查，不代表真实 RAG 的检索质量。
+`DemoFeatureHashEmbeddingService` 是 256 维 SHA-256 特征哈希演示实现，只在 `demo-embedding` Profile 下启用。它没有经过语义模型训练，不参与默认正式检索。
 
 检索过程：
 
@@ -215,7 +218,16 @@ PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model
 5. 同一来源最多保留 2 个片段，最后截取 Top-K；距离相同时按 `chunk_id` 升序。
 6. `score` 先将相似度限制在 0–1，再计算 `round(similarity × 100)`，是 0–100 的相似度百分比，不是概率。
 
-当前配置的候选上限为 20、最低相似度为 0.15。文档向量与查询向量必须来自同一个 `TravelEmbeddingService` 实现，不能混用不同算法或模型版本。
+当前真实模型的候选上限为 20、最低相似度为 0.45。该阈值来自本地真实召回样本：
+
+| 查询 | 观察结果 |
+| --- | --- |
+| 成都春熙路附近有什么小吃 | 命中美食知识，分数 54、52 |
+| 成都两个人三天两夜的总花费怎么估算 | 命中预算知识，其中预算片段分数 49、48 |
+| 去高原旅行出现高原反应应该怎么办 | 命中安全知识，分数 65、49 |
+| 如何治疗感冒、红烧肉怎么做、明天深圳的股票会涨吗 | 均返回空结果 |
+
+有效旅游查询主要集中在约 48–72 分，完全无关查询最高约 30 分，因此选择 0.45 保留有效召回并过滤明显无关结果。阈值不是跨模型通用常量：更换 Embedding 模型、维度或知识库后都要重新采样校准。演示哈希向量的分数尺度不同，在独立演示数据库中启用时应显式设置 `--travel.rag.vector.min-similarity=0.15`。
 
 ## 7. 配置项
 
@@ -223,14 +235,23 @@ PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model
 
 ```yaml
 travel:
+  agent:
+    api-key: ${OPENAI_API_KEY}
   rag:
     knowledge-pattern: classpath*:knowledge/travel/*.md
     top-k: 3
+    embedding:
+      base-url: ${EMBEDDING_BASE_URL:http://127.0.0.1:8000/v1}
+      api-key: ${EMBEDDING_API_KEY:}
+      model-name: ${EMBEDDING_MODEL_NAME:Qwen3-Embedding-0.6B}
+      dimension: ${EMBEDDING_DIMENSION:1024}
+      timeout-seconds: 60
+      query-instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query"
     vector:
       url: ${PG_URL}
       username: ${PG_USER}
       password: ${PG_PASSWORD}
-      min-similarity: 0.15
+      min-similarity: 0.45
       candidate-limit: 20
 
 spring:
@@ -243,16 +264,21 @@ spring:
       ddl-auto: update
 ```
 
-`application.yml` 还提供了本地示例默认地址；生产或本地联调时应按实际环境覆盖。启动环境变量示例见 [README](../README.md#6-启动)。
+`application.yml` 提供了本地示例默认地址；生产或本地联调时应按实际环境覆盖。Chat 使用 `OPENAI_API_KEY`，Embedding 使用 `EMBEDDING_API_KEY`；本机 omlx 两个接口都要求认证。启动环境变量示例见 [README](../README.md#6-启动)。
 
 | 配置 | 说明 |
 | --- | --- |
 | `travel.rag.knowledge-pattern` | 启动同步所需的 Spring Resource 匹配规则 |
 | `travel.rag.top-k` | 默认返回片段数量，范围 1 到 10 |
+| `travel.rag.embedding.base-url` | Embedding 服务地址，通过 `EMBEDDING_BASE_URL` 覆盖 |
+| `travel.rag.embedding.api-key` | Embedding 服务密钥，通过 `EMBEDDING_API_KEY` 注入；服务不要求认证时可为空 |
+| `travel.rag.embedding.model-name` | Embedding 模型名称，通过 `EMBEDDING_MODEL_NAME` 覆盖 |
+| `travel.rag.embedding.dimension` | 向量维度，默认 1024，通过 `EMBEDDING_DIMENSION` 覆盖 |
+| `travel.rag.embedding.timeout-seconds` | Embedding HTTP 连接和读取超时 |
 | `travel.rag.vector.url` | PostgreSQL JDBC 地址，通过 `PG_URL` 覆盖 |
 | `travel.rag.vector.username` | PostgreSQL 用户名，通过 `PG_USER` 覆盖 |
 | `travel.rag.vector.password` | PostgreSQL 密码，`PG_PASSWORD` 启动必填 |
-| `travel.rag.vector.min-similarity` | 最低余弦相似度，范围 0 到 1，当前为 `0.15` |
+| `travel.rag.vector.min-similarity` | 最低余弦相似度，真实模型默认 `0.45`，演示模型显式使用 `0.15` |
 | `travel.rag.vector.candidate-limit` | pgvector 候选上限，当前为 `20` |
 | `MYSQL_DATABASE` | 业务库名称 |
 | `MYSQL_USER` | MySQL 用户名 |
@@ -262,8 +288,8 @@ spring:
 调整建议：
 
 - 命中过多：提高 `min-similarity`、降低 `top-k`，或检查知识段落是否过于宽泛。
-- 命中过少：先核对两库数量和模型标记，再适当降低 `min-similarity`。
-- 结果不相关：优先检查知识正文和 Embedding 实现；当前特征哈希不具备语义能力，替换真实模型比单纯调阈值更有效。
+- 命中过少：先核对两库数量、模型标记和 Embedding 服务，再适当降低 `min-similarity`。
+- 结果不相关：优先检查知识覆盖和正文质量。酒店等主题缺失时应补充知识，不要期待调阈值补出不存在的内容。
 - 候选遗漏：适当增加 `candidate-limit`，但会增加 MySQL 回查和距离计算开销。
 - 单次上下文过长：减少 `top-k` 或缩短知识段落。
 
@@ -319,7 +345,7 @@ SELECT COUNT(*) AS vector_count,
        MIN(vector_dims(embedding)) AS min_dimension,
        MAX(vector_dims(embedding)) AS max_dimension,
        COUNT(*) FILTER (
-           WHERE vector_dims(embedding) <> 256
+           WHERE vector_dims(embedding) <> 1024
        ) AS wrong_dimension_count
 FROM travel_knowledge_embedding;
 
@@ -330,7 +356,7 @@ ORDER BY model_name;
 
 SELECT chunk_id
 FROM travel_knowledge_embedding
-WHERE model_name = 'demo-feature-hash-v3'
+WHERE model_name = 'Qwen3-Embedding-0.6B@1024'
 ORDER BY chunk_id;
 
 SELECT indexname, indexdef
@@ -338,32 +364,42 @@ FROM pg_indexes
 WHERE schemaname = current_schema()
   AND tablename = 'travel_knowledge_embedding'
 ORDER BY indexname;
+
+SELECT COUNT(*) AS backup_count,
+       MIN(vector_dims(embedding)) AS min_dimension,
+       MAX(vector_dims(embedding)) AS max_dimension
+FROM travel_knowledge_embedding_demo256_backup_20261127;
+
+SELECT model_name, COUNT(*) AS backup_count
+FROM travel_knowledge_embedding_demo256_backup_20261127
+GROUP BY model_name;
 ```
 
-当前基线应为 19 条唯一 `chunk_id`，最小和最大维度均为 256，错误维度数量为 0，模型标记为 `demo-feature-hash-v3`。`chunk_id` 排序结果应与 MySQL 的 `id` 列表一致。索引结果应包含：
+当前正式表基线应为 19 条唯一 `chunk_id`，最小和最大维度均为 1024，错误维度数量为 0，模型标记为 `Qwen3-Embedding-0.6B@1024`。`chunk_id` 排序结果应与 MySQL 的 `id` 列表一致。备份表应保留 19 条、256 维、`demo-feature-hash-v3` 数据。正式表索引结果应包含：
 
+- `travel_knowledge_embedding_pkey`：`chunk_id` 主键。
 - `idx_travel_knowledge_embedding_model`：`model_name` 普通索引。
 - `idx_travel_knowledge_embedding_hnsw`：HNSW 索引，方法为 `vector_cosine_ops`。
 
-可以用一条已存储的向量核对余弦距离和排序，不需要手工拼写 256 个浮点数：
+可以用一条已存储的向量核对余弦距离和排序，不需要手工拼写 1024 个浮点数：
 
 ```sql
 WITH query_vector AS (
     SELECT embedding
     FROM travel_knowledge_embedding
     WHERE chunk_id = 'chengdu-food-1'
-      AND model_name = 'demo-feature-hash-v3'
+      AND model_name = 'Qwen3-Embedding-0.6B@1024'
 )
 SELECT e.chunk_id,
        1 - (e.embedding <=> q.embedding) AS similarity
 FROM travel_knowledge_embedding AS e
 CROSS JOIN query_vector AS q
-WHERE e.model_name = 'demo-feature-hash-v3'
+WHERE e.model_name = 'Qwen3-Embedding-0.6B@1024'
 ORDER BY e.embedding <=> q.embedding, e.chunk_id
 LIMIT 20;
 ```
 
-`chengdu-food-1` 与自身比较时相似度应为 1。这条 SQL 只用于核对数据库距离运算，实际 HTTP 检索仍会先通过当前 Embedding 实现生成查询向量。
+`chengdu-food-1` 与自身比较时相似度应为 1。这条 SQL 只用于核对数据库距离运算，实际 HTTP 检索仍会先通过 `embedQuery` 生成查询向量。
 
 ## 10. 如何调试
 
@@ -374,18 +410,19 @@ LIMIT 20;
 - 检查两张表的 ID 是否一致；MySQL 正文缺失的候选会被跳过。
 - 检查 `min-similarity` 和 `candidate-limit`，必要时调整后重新调用独立检索接口。
 - 查看启动日志中的 MySQL 片段数量和向量同步数量。
-- 如果问题是语义相近但用词不同的表达，应替换真实 Embedding，不要期待特征哈希理解同义词。
+- 如果问题是语义相近但用词不同的表达仍无法命中，检查 Embedding 服务认证、模型名称、维度和 Qwen3 查询指令。
+- 本机 omlx 缺少 `EMBEDDING_API_KEY` 时会导致启动同步失败，应先修正环境变量，不要通过降低阈值绕过。
 
 ### 命中了错误知识
 
 - 检查标题是否过于宽泛，段落是否混合多个主题。
 - 拆分知识段落，使每个片段只表达一个完整知识点。
 - 确认文档向量和查询向量使用同一模型、同一版本和同一维度。
-- 当前演示 Embedding 只比较特征词重合，语义相近问题较多时应尽快替换真实模型。
+- 如果知识库缺少对应主题，例如酒店区域，应补充知识；真实语义模型仍无法检索出不存在的内容。
 
 ### 分数很高但内容不相关
 
-特征哈希可能产生词项碰撞，也无法理解完整语义。相似度百分比只表示当前向量空间中的距离，不是内容正确率。先核对数据库和模型标记，再检查知识内容；不要仅凭高分认定答案可靠。
+相似度百分比只表示当前向量空间中的距离，不是内容正确率。先核对数据库和模型标记，再检查知识内容与主题覆盖；不要仅凭高分认定答案可靠。阈值可以过滤明显无关结果，但不能修复错误或不完整的知识正文。
 
 ### 答案没有正文引用
 
@@ -395,7 +432,8 @@ LIMIT 20;
 
 - 检索发生在应用层，使用 JDBC + pgvector，不是 Agent 自主调用工具。
 - 知识正文持久化在 MySQL，向量持久化在 PostgreSQL，两库通过 `chunk_id` 关联。
-- 当前 256 维特征哈希只用于跑通链路，不具备真正的语义理解和语义排序能力。
+- 默认使用真实 `Qwen3-Embedding-0.6B@1024`；256 维特征哈希仅保留在 `demo-embedding` Profile 中，用于独立演示数据库。
+- 相似度阈值依赖模型和知识库，当前 0.45 只适用于已验证样本；酒店等未覆盖主题可能误命中其他旅游知识。
 - Markdown 作为初始化素材，启动同步不会自动删除数据库中已移除的旧片段或旧向量。
 - 应用首次启动会创建不存在的扩展、表和索引，但不会自动删表或迁移已有向量维度；维度不一致时会明确终止启动，要求人工备份和重建。
 - `score` 是相似度百分比，不是概率，也不保证知识与用户条件一致。
@@ -469,38 +507,28 @@ RAG 材料来自项目公共旅游知识库，使用 `[1]`、`[2]` 等编号标�
 
 知识来源章节由程序统一追加，不依赖模型自觉生成；`knowledgeSources` 的顺序与 `[1]`、`[2]` 编号一致，其中的 `score` 同为 0–100 相似度百分比。没有命中时返回空数组，且答案不包含知识来源章节。指南 Agent 返回空内容时，服务仍会使用专家回答并保留来源。
 
-## 13. 替换为真实 Embedding 模型
+## 13. 真实模型迁移结果与后续切换
 
-pgvector 链路已经完成，替换时不需要改 MySQL 正文存储、`TravelVectorRepository` 或 HTTP 接口，核心是替换唯一的 `TravelEmbeddingService` Bean：
+项目已经完成从 256 维演示向量到 1024 维真实向量的迁移：
 
-1. **新增实现**：实现 `getDimension()`、`getModelName()` 和 `embed(String text)`。文本转向量必须返回固定维度，知识同步与查询都注入这一个接口，不要分别调用不同模型。
-2. **保证唯一 Bean**：移除 `DemoFeatureHashEmbeddingService` 的 `@Service`，或给 Demo 与真实实现配置互斥 `@Profile`。每个环境只能有一个 `TravelEmbeddingService` Bean。
-3. **标记算法和模型版本**：新的 `getModelName()` 必须能区分算法和模型版本，例如包含真实模型名称及版本。不要沿用演示标记，也不要在模型升级后继续使用无法区分的旧标记。
-4. **统一文档与查询**：启动同步用“标题 + 换行 + 正文”生成文档向量，查询用用户当前问题生成查询向量；两者必须使用同一实现、版本和维度。同步修改文档、核对 SQL 和查询中的模型标记。
-5. **备份并处理旧表**：停止应用，确认目标 PostgreSQL 数据库，并备份 `travel_knowledge_embedding`。不能让应用自动删表。
-6. **重启重建并验证**：重新启动应用，按新模型生成全部向量，再检查测试结果、模型标记、维度、唯一片段数、索引和检索质量。
+| 表 | 当前用途 | 已验证结果 |
+| --- | --- | --- |
+| `travel_knowledge_embedding` | 正式 Qwen3 向量表 | 19 条唯一片段，1024 维，模型标记 `Qwen3-Embedding-0.6B@1024` |
+| `travel_knowledge_embedding_demo256_backup_20261127` | 旧演示向量备份 | 19 条片段，256 维，模型标记 `demo-feature-hash-v3` |
 
-### 维度变化
+迁移没有修改 MySQL `travel_knowledge_chunk`。应用第二次启动日志为 `Synchronized 0`，证明正文哈希和模型标记共同构成的幂等判断生效。正式表的普通索引、HNSW `vector_cosine_ops` 索引和主键均已核对。
 
-`CREATE TABLE IF NOT EXISTS` 不会把已有的 `VECTOR(256)` 改成新维度，应用启动时的维度校验也会明确拒绝继续运行。确认目标库并完成备份后，由数据库管理员手工删除旧表，再启动应用自动建表：
+以后切换 Embedding 模型或维度时：
 
-```sql
--- 仅在确认目标数据库并完成备份后手工执行。
-DROP TABLE travel_knowledge_embedding;
-```
+1. 通过环境变量配置新的 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL_NAME`、`EMBEDDING_DIMENSION` 和可选 `EMBEDDING_API_KEY`。
+2. 确认 `TravelEmbeddingService` 只有一个 Profile 对应的实现，并让 `getModelName()` 区分模型版本和维度。
+3. 保持 `embedDocument` 与 `embedQuery` 使用同一模型、版本和维度；不要在两处分别调用不同实现。
+4. 停止应用，确认目标 PostgreSQL 数据库，重命名旧表、主键约束和索引，保留可回滚数据。
+5. 重启应用自动创建新表并重建向量，再核对 19 条片段、维度、模型标记、索引、`Synchronized 0` 和检索样本。
 
-应用会按新实现返回的维度重新创建表和索引，再从 MySQL 同步正文和向量。MySQL `travel_knowledge_chunk` 不需要删除。
+`CREATE TABLE IF NOT EXISTS` 不会把已有 `VECTOR(256)` 改成 `VECTOR(1024)`。应用不会自动 `DROP TABLE` 或 `TRUNCATE TABLE`；维度不一致时会明确终止启动。完整的迁移 SQL、备份核对和可逆回滚步骤见 [开发与扩展指南](02-development-guide.md#切换-embedding-模型与迁移向量表)。
 
-### 同维度换模型
-
-即使新旧模型维度相同，也建议先备份，再手工清表并重启，让应用重建全部向量，避免旧模型记录残留：
-
-```sql
--- 仅在确认目标数据库并完成备份后手工执行。
-TRUNCATE TABLE travel_knowledge_embedding;
-```
-
-应用不会自动执行上述 `DROP TABLE` 或 `TRUNCATE TABLE`。清表后应确认新模型记录已经完整生成，再开放检索。
+如需运行演示哈希实现，必须使用 `SPRING_PROFILES_ACTIVE=demo-embedding`、独立 256 维演示数据库和 `--travel.rag.vector.min-similarity=0.15`。不要把演示 Profile 指向当前 1024 维正式库。
 
 ### AgentScope Java 学习资料
 

@@ -1,7 +1,7 @@
 package com.example.agentscope.travel.rag;
 
 /**
- * 知识向量生成接口，后续部署真实 Embedding 模型时替换当前实现即可。
+ * 知识向量生成接口，文档与查询可以使用不同的输入规则。
  */
 public interface TravelEmbeddingService {
 
@@ -16,7 +16,12 @@ public interface TravelEmbeddingService {
     String getModelName();
 
     /**
-     * 把文本转换成固定维度的浮点向量。
+     * 把知识文档转换成固定维度的浮点向量。
      */
-    float[] embed(String text);
+    float[] embedDocument(String text);
+
+    /**
+     * 把游客问题转换成查询向量，可添加检索指令。
+     */
+    float[] embedQuery(String text);
 }

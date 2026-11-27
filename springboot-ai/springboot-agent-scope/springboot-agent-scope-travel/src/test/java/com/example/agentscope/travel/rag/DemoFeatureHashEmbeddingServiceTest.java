@@ -20,14 +20,14 @@ class DemoFeatureHashEmbeddingServiceTest {
     void embed_returnsConfiguredDimensionAndModelName() {
         assertThat(embeddingService.getDimension()).isEqualTo(256);
         assertThat(embeddingService.getModelName()).isEqualTo("demo-feature-hash-v3");
-        assertThat(embeddingService.embed("成都美食")).hasSize(256);
+        assertThat(embeddingService.embedDocument("成都美食")).hasSize(256);
     }
 
     @Test
     @DisplayName("相同文本每次生成完全相同的向量")
     void embedWithSameText_returnsStableVector() {
-        float[] first = embeddingService.embed("成都三天两夜行程");
-        float[] second = new DemoFeatureHashEmbeddingService().embed("成都三天两夜行程");
+        float[] first = embeddingService.embedDocument("成都三天两夜行程");
+        float[] second = new DemoFeatureHashEmbeddingService().embedDocument("成都三天两夜行程");
 
         assertThat(first).containsExactly(second);
     }
@@ -35,8 +35,8 @@ class DemoFeatureHashEmbeddingServiceTest {
     @Test
     @DisplayName("英文大小写不影响向量结果")
     void embedWithDifferentEnglishCase_returnsSameVector() {
-        float[] upperCase = embeddingService.embed("Chengdu Food Guide");
-        float[] lowerCase = embeddingService.embed("chengdu food guide");
+        float[] upperCase = embeddingService.embedDocument("Chengdu Food Guide");
+        float[] lowerCase = embeddingService.embedDocument("chengdu food guide");
 
         assertThat(upperCase).containsExactly(lowerCase);
     }
@@ -44,8 +44,8 @@ class DemoFeatureHashEmbeddingServiceTest {
     @Test
     @DisplayName("中文语气词不会稀释有效查询词")
     void embedWithChineseQuestionParticles_ignoresNoiseTerms() {
-        float[] conciseQuery = embeddingService.embed("成都火锅串串");
-        float[] questionQuery = embeddingService.embed("成都火锅串串怎么选");
+        float[] conciseQuery = embeddingService.embedDocument("成都火锅串串");
+        float[] questionQuery = embeddingService.embedDocument("成都火锅串串怎么选");
 
         assertThat(questionQuery).containsExactly(conciseQuery);
     }
@@ -53,7 +53,7 @@ class DemoFeatureHashEmbeddingServiceTest {
     @Test
     @DisplayName("向量经过 L2 归一化")
     void embed_returnsUnitLengthVector() {
-        float[] vector = embeddingService.embed("成都美食和旅行预算");
+        float[] vector = embeddingService.embedDocument("成都美食和旅行预算");
 
         assertThat(cosineSimilarity(vector, vector)).isCloseTo(1.0D, within(0.000001D));
     }
@@ -61,9 +61,9 @@ class DemoFeatureHashEmbeddingServiceTest {
     @Test
     @DisplayName("有共同词项的文本比无关文本更相似")
     void embedWithSharedTerms_returnsHigherSimilarity() {
-        float[] foodVector = embeddingService.embed("成都美食推荐");
-        float[] chengduVector = embeddingService.embed("成都火锅和小吃");
-        float[] quantumVector = embeddingService.embed("量子纠缠实验");
+        float[] foodVector = embeddingService.embedDocument("成都美食推荐");
+        float[] chengduVector = embeddingService.embedDocument("成都火锅和小吃");
+        float[] quantumVector = embeddingService.embedDocument("量子纠缠实验");
 
         double sharedSimilarity = cosineSimilarity(foodVector, chengduVector);
         double unrelatedSimilarity = cosineSimilarity(foodVector, quantumVector);
@@ -75,7 +75,7 @@ class DemoFeatureHashEmbeddingServiceTest {
     @Test
     @DisplayName("没有词项的标点文本也返回非零向量")
     void embedWithPunctuation_returnsNonZeroVector() {
-        float[] vector = embeddingService.embed("？？？");
+        float[] vector = embeddingService.embedDocument("？？？");
 
         assertThat(cosineSimilarity(vector, vector)).isCloseTo(1.0D, within(0.000001D));
     }
@@ -84,7 +84,7 @@ class DemoFeatureHashEmbeddingServiceTest {
     @DisplayName("空文本不能生成向量")
     void embedWithBlankText_throwsException() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> embeddingService.embed("  "))
+                .isThrownBy(() -> embeddingService.embedDocument("  "))
                 .withMessageContaining("不能为空");
     }
 

@@ -3,6 +3,7 @@ package com.example.agentscope.travel.config;
 import com.example.agentscope.travel.agent.TravelAgentPrompts;
 import com.example.agentscope.travel.agent.TravelAgentTeam;
 import com.example.agentscope.travel.api.AgentType;
+import com.example.agentscope.travel.context.TravelRuntimeContextMiddleware;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentStateStore;
@@ -24,7 +25,11 @@ import java.util.EnumMap;
 import java.util.Map;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({TravelAgentProperties.class, TravelRagProperties.class})
+@EnableConfigurationProperties({
+        TravelAgentProperties.class,
+        TravelRagProperties.class,
+        TravelContextProperties.class
+})
 public class TravelAgentConfiguration {
 
     @Bean
@@ -58,28 +63,29 @@ public class TravelAgentConfiguration {
             Model model,
             AgentStateStore stateStore,
             TravelAgentProperties properties,
-            MemoryConfig memoryConfig) {
+            MemoryConfig memoryConfig,
+            TravelRuntimeContextMiddleware contextMiddleware) {
         Path memoryWorkspace = properties.getMemoryWorkspaceDirectory();
         HarnessAgent router = createAgent(
                 "travel-router", TravelAgentPrompts.ROUTER,
-                model, stateStore, memoryWorkspace, memoryConfig, 3, false);
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 3, false);
         HarnessAgent guide = createAgent(
                 "travel-guide", TravelAgentPrompts.GUIDE,
-                model, stateStore, memoryWorkspace, memoryConfig, 4, true);
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 4, true);
 
         Map<AgentType, HarnessAgent> specialists = new EnumMap<>(AgentType.class);
         specialists.put(AgentType.ITINERARY, createAgent(
                 "travel-itinerary", TravelAgentPrompts.ITINERARY,
-                model, stateStore, memoryWorkspace, memoryConfig, 4, false));
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 4, false));
         specialists.put(AgentType.FOOD, createAgent(
                 "travel-food", TravelAgentPrompts.FOOD,
-                model, stateStore, memoryWorkspace, memoryConfig, 4, false));
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 4, false));
         specialists.put(AgentType.BUDGET, createAgent(
                 "travel-budget", TravelAgentPrompts.BUDGET,
-                model, stateStore, memoryWorkspace, memoryConfig, 4, false));
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 4, false));
         specialists.put(AgentType.GENERAL, createAgent(
                 "travel-general", TravelAgentPrompts.GENERAL,
-                model, stateStore, memoryWorkspace, memoryConfig, 4, false));
+                model, stateStore, memoryWorkspace, memoryConfig, contextMiddleware, 4, false));
 
         return new TravelAgentTeam(router, Map.copyOf(specialists), guide);
     }
@@ -91,6 +97,7 @@ public class TravelAgentConfiguration {
             AgentStateStore stateStore,
             Path memoryWorkspace,
             MemoryConfig memoryConfig,
+            TravelRuntimeContextMiddleware contextMiddleware,
             int maxIters,
             boolean automaticMemory) {
         // 项目目录也指向记忆工作区，避免 LocalFilesystemSpec 默认回退读取当前应用源码。
@@ -103,6 +110,7 @@ public class TravelAgentConfiguration {
                 .name(name)
                 .sysPrompt(createSystemPrompt(prompt, automaticMemory))
                 .model(model)
+                .middleware(contextMiddleware)
                 .toolkit(new Toolkit())
                 .stateStore(stateStore)
                 .maxIters(maxIters)

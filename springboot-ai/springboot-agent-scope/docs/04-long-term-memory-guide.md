@@ -189,6 +189,8 @@ Harness 2.0.4 的抽取和首次维护可能并发执行，维护任务有可能
 
 RAG 是项目公共旅游知识，长期记忆是用户个人上下文。`TravelGuideService` 会把 `MEMORY.md` 以“个人上下文，禁止添加知识引用”的独立段落同时提供给专家和指南 Agent，减少小模型混淆两类来源。提示词还要求模型不得把记忆内容当作 RAG 结果，也不得为记忆内容添加检索引用编号。
 
+`TravelRequestContext` 和 `RuntimeContext` 中的 `requestId`、渠道、时区等属性只在单次调用链内有效，不会跨请求持久化。Middleware 追加的当前时间提醒使用 synthetic 元数据，仅进入当前模型输入，不写入每日日志或 `MEMORY.md`；`requestId` 也只用于日志，不放入模型提示。
+
 ## 8. 本地验证
 
 ### 写入偏好
@@ -279,7 +281,7 @@ HTTP Demo 固定用户，不能通过请求体切换用户。自动化测试 `Tr
 
 ## 10. 当前验证结果
 
-- 25 项单元测试全部通过。
+- 39 项单元测试全部通过。
 - 真实本地模型已完成同一用户不同 `sessionId` 的偏好写入和召回。
 - 每日日志、`MEMORY.md` 和 `.consolidation_state` 均已实际生成。
 - 移除 `memory_save` 后，每日日志只保留自动 `Memory Flush` 段落，没有重复保存。
@@ -287,6 +289,8 @@ HTTP Demo 固定用户，不能通过请求体切换用户。自动化测试 `Tr
 - 真实本地模型直连已验证不同 `userId` 隔离：Alice 的记忆只写入 Alice 目录，Bob 的回答明确表示没有相关记录。
 - 真实模型跨会话回答能够召回偏好，且记忆句子不再添加 RAG 引用编号。
 - 自动化测试已验证不同 `userId` 的文件目录隔离。
+- `TravelRuntimeContextFactoryTest` 已验证请求元数据共享和不同请求隔离。
+- `TravelRuntimeContextMiddlewareTest` 已验证 synthetic 时间提示不修改原始输入，且不向模型暴露 `requestId`。
 
 长期记忆仍依赖本地文件系统和 LLM 抽取质量，不适合直接作为生产级多租户存储。生产环境需要接入认证、共享或分布式存储、备份、权限控制和审计。
 

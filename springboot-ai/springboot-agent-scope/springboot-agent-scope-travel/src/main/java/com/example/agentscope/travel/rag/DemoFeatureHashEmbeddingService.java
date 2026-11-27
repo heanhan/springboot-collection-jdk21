@@ -1,5 +1,6 @@
 package com.example.agentscope.travel.rag;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.ByteBuffer;
@@ -14,6 +15,7 @@ import java.util.regex.Pattern;
 
 /** 本地假 Embedding：用 SHA-256 特征哈希验证 pgvector 流程，不具备真实语义能力。 */
 @Service
+@Profile("demo-embedding")
 public class DemoFeatureHashEmbeddingService implements TravelEmbeddingService {
 
     private static final int DIMENSION = 256;
@@ -38,7 +40,16 @@ public class DemoFeatureHashEmbeddingService implements TravelEmbeddingService {
     }
 
     @Override
-    public float[] embed(String text) {
+    public float[] embedDocument(String text) {
+        return createEmbedding(text);
+    }
+
+    @Override
+    public float[] embedQuery(String text) {
+        return createEmbedding(text);
+    }
+
+    private float[] createEmbedding(String text) {
         if (text == null || text.trim().isEmpty()) {
             throw new IllegalArgumentException("Embedding 输入文本不能为空");
         }

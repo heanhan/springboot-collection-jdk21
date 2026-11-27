@@ -17,12 +17,13 @@
 | Spring Boot | 3.5.16 |
 | AgentScope Java | 2.0.4 |
 | 模型接入 | OpenAI 兼容 Chat Completions API |
-| 本地模型示例 | `Qwen3.5-4B-MLX-4bit` |
+| 当前配置模型 | `Qwen3.6-35B-A3B-5bit` |
 | Agent 状态存储 | `JsonFileAgentStateStore` |
 | 长期记忆 | AgentScope Harness 两层记忆，本地文件按用户隔离 |
+| 运行时上下文 | `TravelRequestContext` + `RuntimeContext` + Middleware，统一注入时间、时区和渠道 |
 | 知识正文 | MySQL 8 + Spring Data JPA |
 | 向量存储与检索 | PostgreSQL 17.9 + pgvector 0.8.2，应用层 JDBC |
-| Embedding | `DemoFeatureHashEmbeddingService`，`demo-feature-hash-v3`，256 维；仅用于跑通链路 |
+| Embedding | `Qwen3-Embedding-0.6B`，1024 维，OpenAI 兼容接口；演示哈希实现仅在 `demo-embedding` Profile 启用 |
 | 接口风格 | HTTP JSON，非 SSE 流式接口 |
 
 > 本项目是 AgentScope Java 示例。`docs.agentscope.io/zh/versions/2.0.12` 对应 Python 版文档，Java API 应以 [AgentScope Java 2.0 文档](https://java.agentscope.io/v2) 为准。当前 RAG 明确采用应用层 JDBC + pgvector，不与 Python 文档中的存储方案混用。
@@ -38,6 +39,7 @@ springboot-agent-scope
 │   ├── controller
 │   ├── service
 │   ├── agent
+│   ├── context
 │   ├── rag
 │   ├── config
 │   └── resources
@@ -67,12 +69,16 @@ springboot-agent-scope
 - `TravelKnowledgeController`：提供独立知识检索接口 `/api/travel/knowledge/search`。
 - `TravelGuideService`：编排路由、知识检索、专家和指南 Agent，并追加知识来源。
 - `TravelKnowledgeService`：同步 MySQL 知识片段，生成或更新 pgvector 向量，并编排候选筛选和正文回查。
-- `TravelEmbeddingService`、`DemoFeatureHashEmbeddingService`：统一文本转向量接口及当前 256 维演示实现。
+- `TravelEmbeddingService`：统一文档与查询的文本转向量接口。
+- `OpenAiCompatibleEmbeddingService`、`TravelEmbeddingConfiguration`、`TravelEmbeddingProperties`：默认真实 Embedding 实现及 OpenAI 兼容 HTTP 配置。
+- `DemoFeatureHashEmbeddingService`：256 维演示实现，仅在 `demo-embedding` Profile 下启用。
 - `TravelKnowledgeChunk`、`TravelKnowledgeChunkRepository`：通过 JPA 持久化旅游知识正文。
 - `TravelVectorRepository`：通过 JDBC 创建 pgvector 表和索引，幂等写入向量并执行余弦距离检索。
 - `TravelAgentConfiguration`：创建模型、状态存储和六个 Agent。
+- `TravelRequestContext`、`TravelRuntimeContextFactory`：保存一次请求的元数据，并创建各 Agent 的运行时上下文。
+- `TravelRuntimeContextMiddleware`：临时注入当前时间、时区和渠道，并记录带 `requestId` 的调用日志。
 - `TravelAgentPrompts`：集中管理六个 Agent 的提示词和旅游记忆抽取、整理规则。
-- `TravelAgentProperties`、`TravelRagProperties`、`TravelVectorProperties`：绑定模型、超时、状态目录和 RAG 配置。
+- `TravelAgentProperties`、`TravelRagProperties`、`TravelEmbeddingProperties`、`TravelVectorProperties`、`TravelContextProperties`：绑定模型、超时、状态目录、Embedding、RAG 和运行时上下文配置。
 - `TravelVectorConfiguration`：创建独立于 MySQL JPA 数据源的 PostgreSQL `JdbcTemplate`。
 
 ## 整体调用链
@@ -110,22 +116,29 @@ TravelChatResponse
 
 六个 Agent 共享同一个模型实例和状态存储，但使用不同的 Agent 名称、提示词和会话命名空间。Guide 额外开启长期记忆自动抽取和整理，路由与专家只读取记忆；工作区按 `userId` 隔离，同一用户跨会话共享 `MEMORY.md` 和每日日志。
 
+每次 HTTP 问答只创建一个 `TravelRequestContext`，其中的 `requestId`、用户、业务会话、渠道和时区由工厂放入 Router、专家和 Guide 的 `RuntimeContext`。AgentScope 的 `sessionId` 仍使用各自命名空间，避免会话状态互相污染；运行时属性只在本次调用链内有效，不替代持久化会话状态。
+
 ## 快速启动
 
 ### 1. 准备本地模型服务
 
-启动 OpenAI 兼容服务，并确认以下地址可访问：
+启动 OpenAI 兼容服务，并确认以下地址和模型可访问：
 
 ```text
 Base URL: http://127.0.0.1:8000/v1
-Model:    Qwen3.5-4B-MLX-4bit
+Chat:     Qwen3.6-35B-A3B-5bit
+Embedding: Qwen3-Embedding-0.6B
 ```
 
-可以检查模型列表：
+本机 omlx 服务要求 Authorization。下面的占位符只在当前 Shell 中提供，不要写入配置文件或提交到 Git：
 
 ```bash
-curl http://127.0.0.1:8000/v1/models
+export OPENAI_API_KEY='<model-api-key>'
+curl http://127.0.0.1:8000/v1/models \
+  -H "Authorization: Bearer ${OPENAI_API_KEY}"
 ```
+
+返回结果中应包含配置的 Chat 和 Embedding 模型名称。
 
 ### 2. 检查配置
 
@@ -137,18 +150,24 @@ curl http://127.0.0.1:8000/v1/models
 
 | 配置项 | 说明 |
 | --- | --- |
-| `travel.agent.api-key` | 本地服务密钥，通过 `OPENAI_API_KEY` 环境变量注入 |
-| `travel.agent.base-url` | OpenAI 兼容接口地址 |
-| `travel.agent.model-name` | Chat 模型名称 |
+| `travel.agent.api-key` | Chat 模型密钥，通过 `OPENAI_API_KEY` 环境变量注入 |
+| `travel.agent.base-url` | Chat 模型 OpenAI 兼容接口地址，可通过 `OPENAI_BASE_URL` 覆盖 |
+| `travel.agent.model-name` | Chat 模型名称，可通过 `OPENAI_MODEL_NAME` 覆盖 |
 | `travel.agent.stream` | 模型内部是否流式生成 |
 | `travel.agent.temperature` | 生成随机程度 |
 | `travel.agent.max-tokens` | 单次回答最大 Token 数 |
 | `travel.agent.timeout-seconds` | 单次 Agent 调用超时时间 |
 | `travel.agent.state-directory` | 会话状态保存目录 |
 | `travel.agent.memory-workspace-directory` | 长期记忆工作区，默认 `.agentscope-data/travel-memory` |
+| `travel.context.time-zone` | 动态运行时时间提示使用的时区，默认 `Asia/Shanghai` |
 | `travel.rag.knowledge-pattern` | 旅游知识文件匹配规则 |
 | `travel.rag.top-k` | 每次问答默认检索的片段数量 |
-| `travel.rag.vector.min-similarity` | 最低余弦相似度，当前为 `0.15`，范围 0 到 1 |
+| `travel.rag.embedding.base-url` | Embedding 服务地址，可通过 `EMBEDDING_BASE_URL` 覆盖 |
+| `travel.rag.embedding.api-key` | Embedding 服务密钥，通过 `EMBEDDING_API_KEY` 注入；服务不要求认证时可为空 |
+| `travel.rag.embedding.model-name` | Embedding 模型名称，可通过 `EMBEDDING_MODEL_NAME` 覆盖 |
+| `travel.rag.embedding.dimension` | 向量维度，默认 `1024`，可通过 `EMBEDDING_DIMENSION` 覆盖 |
+| `travel.rag.embedding.timeout-seconds` | Embedding HTTP 连接和读取超时 |
+| `travel.rag.vector.min-similarity` | 最低余弦相似度，真实 Qwen3 模型默认 `0.45`，范围 0 到 1 |
 | `travel.rag.vector.candidate-limit` | 每次先从 pgvector 获取的候选数量，当前为 `20` |
 | `travel.rag.vector.url` | PostgreSQL JDBC 地址，可通过 `PG_URL` 覆盖 |
 | `travel.rag.vector.username` | PostgreSQL 用户名，可通过 `PG_USER` 覆盖 |
@@ -191,7 +210,7 @@ Hibernate 会在首次启动时创建 `travel_knowledge_chunk` 表。应用启�
 3. 创建 `model_name` 普通索引 `idx_travel_knowledge_embedding_model`。
 4. 创建 HNSW 索引 `idx_travel_knowledge_embedding_hnsw`，使用 `vector_cosine_ops`。
 
-PostgreSQL 账号需要能连接目标数据库，并具备创建扩展、建表、建索引及后续读写向量表的权限。`CREATE EXTENSION` 通常需要数据库所有者或被授予相应权限的账号；是否还需要超级用户，取决于服务器的 pgvector 安装方式。启动时应用会核对现有向量列维度与当前 Embedding 维度，不一致时明确终止启动，避免误写；应用不会自动删除或重建已有向量表，安全重建步骤见 [开发与扩展指南](docs/02-development-guide.md#替换为真实-embedding-模型)。
+PostgreSQL 账号需要能连接目标数据库，并具备创建扩展、建表、建索引及后续读写向量表的权限。`CREATE EXTENSION` 通常需要数据库所有者或被授予相应权限的账号；是否还需要超级用户，取决于服务器的 pgvector 安装方式。启动时应用会核对现有向量列维度与当前 Embedding 维度，不一致时明确终止启动，避免误写；应用不会自动删除或重建已有向量表，256→1024 迁移、备份表核对和回滚步骤见 [开发与扩展指南](docs/02-development-guide.md#切换-embedding-模型与迁移向量表)。
 
 ### 6. 启动
 
@@ -204,11 +223,12 @@ export MYSQL_PASSWORD='<mysql-password>'
 export PG_URL='jdbc:postgresql://<pg-host>:5432/<pg-database>'
 export PG_USER='<pg-user>'
 export PG_PASSWORD='<pg-password>'
-export OPENAI_API_KEY='<model-api-key>'
+export OPENAI_API_KEY='<chat-model-api-key>'
+export EMBEDDING_API_KEY='<embedding-model-api-key>'
 java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/target/springboot-agent-scope-travel-1.0.jar
 ```
 
-jar 名称已按模块 POM 核对：`artifactId` 为 `springboot-agent-scope-travel`，父 POM 版本为 `1.0`。`PG_PASSWORD` 为必填项，缺失或空白时配置校验会阻止应用启动。
+jar 名称已按模块 POM 核对：`artifactId` 为 `springboot-agent-scope-travel`，父 POM 版本为 `1.0`。`MYSQL_PASSWORD` 和 `PG_PASSWORD` 为必填项，缺失或空白时配置校验会阻止应用启动。本机 omlx 的 Chat 和 Embedding 接口都要求认证，因此 `OPENAI_API_KEY` 与 `EMBEDDING_API_KEY` 都需要提供；其他不要求认证的 OpenAI 兼容服务可以不设置 `EMBEDDING_API_KEY`。
 
 默认端口为 `8080`。需要切换端口时：
 
@@ -223,11 +243,13 @@ java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/tar
 | MySQL 8 | `travel_knowledge_chunk` 保存 19 个知识片段及后续业务数据 | Spring Data JPA；启动时同步 Markdown，检索时按 ID 批量读取正文 |
 | PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 保存 19 条向量，通过 `chunk_id` 关联 MySQL 片段 | 独立 `JdbcTemplate`；应用层建表、幂等 upsert 和余弦距离检索 |
 
-当前 Embedding 实现是 `DemoFeatureHashEmbeddingService`，模型标记为 `demo-feature-hash-v3`。它先把文本转小写并去掉“推荐、当地、怎么、如何”等泛化短语，再用 SHA-256 特征哈希提取中文二元词和英文词，生成 256 维向量并做 L2 归一化，只用于验证 pgvector 链路，不具备真正的语义理解，同义改写或跨语言问题可能表现很差。
+默认使用 `OpenAiCompatibleEmbeddingService` 调用本地 `Qwen3-Embedding-0.6B`，模型标记为 `Qwen3-Embedding-0.6B@1024`。文档向量直接由“标题 + 换行 + 正文”生成；查询向量按 Qwen3 检索约定添加 `Instruct` 前缀。适配层会校验响应索引、维度、空值、有限数值和零向量，并做 L2 归一化。256 维 `DemoFeatureHashEmbeddingService` 仅保留用于离线演示，通过 `demo-embedding` Profile 启用，与真实实现互斥。
 
-启动同步时，应用对每个片段的“标题 + 正文”计算 `content_hash`，再按 `chunk_id + content_hash + model_name` 判断是否最新；缺失或变化时生成向量并通过 `ON CONFLICT (chunk_id)` 幂等更新。检索时只使用用户当前问题：query embed → pgvector 候选 → 相似度阈值过滤 → MySQL `findAllById` 批量取正文 → 按向量顺序输出 → 每来源最多 2 个 → Top-K。SQL 使用 `embedding <=> CAST(? AS vector)` 获取余弦距离，应用层按 `similarity = 1 - distance` 计算相似度，并将分数限制在 0–100。
+启动同步时，应用对每个片段的“标题 + 正文”计算 `content_hash`，再按 `chunk_id + content_hash + model_name` 判断是否最新；缺失或变化时生成文档向量并通过 `ON CONFLICT (chunk_id)` 幂等更新。检索时只使用用户当前问题生成查询向量：query embed → pgvector 候选 → 相似度阈值过滤 → MySQL `findAllById` 批量取正文 → 按向量顺序输出 → 每来源最多 2 个 → Top-K。SQL 使用 `embedding <=> CAST(? AS vector)` 获取余弦距离，应用层按 `similarity = 1 - distance` 计算相似度，并将分数限制在 0–100。
 
-当前 25 个单元测试全部通过；真实库中存在 19 条唯一 `chunk_id`、均为 256 维的 `demo-feature-hash-v3` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。已知美食和预算查询能返回知识，未知问题返回空结果；真实 Chat 模型的美食问答也保留了 `[1]`、`[2]` 引用并返回两条 `knowledgeSources`。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
+当前 39 个单元测试全部通过；正式 `travel_knowledge_embedding` 表包含 19 条唯一 `chunk_id`、均为 1024 维的 `Qwen3-Embedding-0.6B@1024` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。旧的 19 条 256 维演示向量完整保留在 `travel_knowledge_embedding_demo256_backup_20261127` 表中。真实 Chat 模型的美食问答已验证 `[1]`、`[2]`、`[3]` 引用和三条 `knowledgeSources`。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
+
+真实模型的默认阈值校准为 `0.45`：成都小吃召回分数为 54/52，预算问题包含 49/48，高原反应包含 65/49；感冒、红烧肉和股票等无关查询返回空结果。演示哈希向量使用不同分数尺度，如需在独立演示数据库中启用 `demo-embedding` Profile，应显式设置 `--travel.rag.vector.min-similarity=0.15`，不要指向当前 1024 维正式库。
 
 ## RAG 知识检索与引用
 
@@ -264,6 +286,22 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 记忆写入是异步的，当前请求不会等待文件落盘。Harness 首次抽取与维护可能并发，`TravelGuideService` 会等待后台任务静默后按水印补偿整理，避免漏生成 `MEMORY.md`。旅游提示词只保留用户明确表达的偏好、约束、历史决策和必要事实，当前输入优先于历史记忆，敏感信息不进入日志。服务会把长期记忆作为独立段落提供给专家和指南 Agent；长期记忆不是 RAG 公共知识，描述记忆的句子不得添加检索引用编号。
 
 配置、验证和排障步骤见 [长期记忆学习指南](docs/04-long-term-memory-guide.md)。
+
+## 运行时上下文
+
+一次旅游问答的上下文分为三层，不能混为一谈：
+
+| 层次 | 当前实现 | 生命周期 |
+| --- | --- | --- |
+| 单次请求元数据 | `TravelRequestContext`：`requestId`、用户、业务会话、渠道、时区 | 当前 `chat` 调用链 |
+| Agent 调用上下文 | `RuntimeContext`：用户、Agent 会话 ID、类型化请求对象和 `request_id` 属性 | 当前 Agent 调用及其中间件 |
+| 持久化会话状态 | `AgentState` + `JsonFileAgentStateStore` | 同一用户、同一 Agent 会话跨请求保留 |
+
+`TravelRuntimeContextFactory` 为 Router、专家和 Guide 创建不同的 Agent 会话 ID，但放入同一个 `TravelRequestContext` 对象。`RuntimeContext` 的扩展属性不会持久化，因此不能用它保存跨会话偏好；跨会话仍依赖 AgentState 和长期记忆。
+
+`TravelRuntimeContextMiddleware` 在每次推理前临时追加当前时间、时区和请求渠道，并标记为 synthetic 消息。它只影响当前模型输入，不修改原始消息列表，不进入 AgentState、每日日志或 `MEMORY.md`。`requestId` 仅用于关联调用日志，不注入模型，也不作为知识引用。
+
+当前仍显式关闭上下文压缩和工具结果卸载。长对话压缩、历史卸载、会话重置与中断属于后续独立优化，不在本次运行时上下文改造中启用。
 
 ## 接口示例
 
@@ -355,23 +393,27 @@ curl -X POST http://localhost:8080/api/travel/chat \
 3. `TravelAgentPrompts`：理解每个 Agent 的职责边界。
 4. `TravelAgentConfiguration`：理解 Agent 是如何创建的。
 5. `TravelKnowledgeService`：理解 MySQL 同步、pgvector 检索和正文回查。
-6. `TravelEmbeddingService`、`DemoFeatureHashEmbeddingService`：理解文本转向量接口及演示算法。
+6. `TravelEmbeddingService`、`OpenAiCompatibleEmbeddingService`：理解文档与查询转向量接口，以及 Qwen3 查询指令和响应校验。
 7. `TravelVectorRepository`：理解自动建表、幂等写入和余弦距离查询。
 8. `TravelGuideService`：理解检索材料如何进入多 Agent 编排，以及来源引用如何返回。
-9. `TravelKnowledgeController`：理解独立检索接口。
-10. `TravelChatController`：理解旅游问答 HTTP 入口。
-11. `TravelAgentProperties`、`TravelRagProperties`、`TravelVectorProperties`：理解可调整的运行参数。
+9. `TravelRuntimeContextFactory`、`TravelRuntimeContextMiddleware`：理解单次请求元数据和动态提示如何进入各 Agent。
+10. `TravelKnowledgeController`：理解独立检索接口。
+11. `TravelChatController`：理解旅游问答 HTTP 入口。
+12. `TravelAgentProperties`、`TravelRagProperties`、`TravelVectorProperties`、`TravelContextProperties`：理解可调整的运行参数。
 
 ## 当前边界
 
 - RAG 已接入专家和指南 Agent，使用应用层 JDBC + pgvector，但只检索项目内置静态知识，不是实时搜索。
 - 知识正文由 MySQL + JPA 持久化，向量由 PostgreSQL 保存，两库通过 `chunk_id` 在应用层关联，没有跨库外键。
-- 当前 256 维 Embedding 是特征哈希演示实现，不具备真正的语义理解；替换步骤见 [开发与扩展指南](docs/02-development-guide.md#替换为真实-embedding-模型)。
+- 默认已接入真实 `Qwen3-Embedding-0.6B@1024`；切换模型或维度时需备份并重建向量表，步骤见 [开发与扩展指南](docs/02-development-guide.md#切换-embedding-模型与迁移向量表)。
 - 检索由应用层执行，不是 Agent 自主调用 RAG 工具，也没有混用 AgentScope Java 的内存 Store 或 Python 文档方案。
 - 没有接入天气、地图、票价、搜索等实时工具。
 - 工作区支持按 `userId` 隔离，但 HTTP 服务固定使用 `local-demo-user`，尚未接入真实登录和认证上下文。
+- `RuntimeContext` 扩展属性和 synthetic 运行时提醒不持久化，跨会话仍依赖 AgentState 和长期记忆。
+- 上下文压缩和工具结果卸载仍显式关闭，长对话优化尚未启用。
 - 模型配置支持流式生成，但 HTTP 接口仍返回聚合后的 JSON。
-- 25 个单元测试已通过；真实数据库验证了 19 条唯一 256 维向量和两类索引，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回、同一用户跨会话的长期记忆召回、首次补偿整理和不同 `userId` 的记忆隔离，但本地小模型的生成质量仍有限。
+- 39 个单元测试已通过；真实数据库验证了 19 条唯一 1024 维向量、两类索引、重复启动幂等和阈值校准样本，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回、同一用户跨会话的长期记忆召回、首次补偿整理和不同 `userId` 的记忆隔离，但本地小模型的生成质量仍有限。
+- 阈值不能弥补知识库覆盖不足。例如“成都酒店应该住在哪个区域”仍可能误命中美食片段；应补充酒店住宿知识、拆分标题和段落，而不是单纯继续调阈值。
 - 本地小模型可能改变用户给出的天数、人数或生成不准确信息，回复中会附带核实提醒。
 
 ## 延伸阅读

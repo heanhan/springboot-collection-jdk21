@@ -6,19 +6,23 @@
 
 ### 启动模型服务
 
-当前示例依赖本地 OpenAI 兼容服务：
+当前示例依赖本地 OpenAI 兼容服务同时提供 Chat 和 Embedding：
 
 ```text
 http://127.0.0.1:8000/v1
+Chat:      Qwen3.6-35B-A3B-5bit
+Embedding: Qwen3-Embedding-0.6B
 ```
 
 先确认服务已启动，再执行：
 
 ```bash
-curl http://127.0.0.1:8000/v1/models
+export OPENAI_API_KEY='<model-api-key>'
+curl http://127.0.0.1:8000/v1/models \
+  -H "Authorization: Bearer ${OPENAI_API_KEY}"
 ```
 
-返回结果中应包含配置的模型名称。
+本机 omlx 服务要求认证；返回结果中应包含上述两个模型名称。密钥只在当前 Shell 中使用，不写入配置文件。
 
 ### 编译打包
 
@@ -39,15 +43,16 @@ export MYSQL_PASSWORD='<mysql-password>'
 export PG_URL='jdbc:postgresql://<pg-host>:5432/<pg-database>'
 export PG_USER='<pg-user>'
 export PG_PASSWORD='<pg-password>'
-export OPENAI_API_KEY='<model-api-key>'
+export OPENAI_API_KEY='<chat-model-api-key>'
+export EMBEDDING_API_KEY='<embedding-model-api-key>'
 java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/target/springboot-agent-scope-travel-1.0.jar
 ```
 
-MySQL 主机地址通过 `spring.datasource.url` 配置或启动参数覆盖；数据库名和用户名分别由 `MYSQL_DATABASE`、`MYSQL_USER` 覆盖。`MYSQL_PASSWORD` 和 `PG_PASSWORD` 都是启动必填项，不要把真实密码写入配置文件或提交到仓库。
+MySQL 主机地址通过 `spring.datasource.url` 配置或启动参数覆盖；数据库名和用户名分别由 `MYSQL_DATABASE`、`MYSQL_USER` 覆盖。`MYSQL_PASSWORD` 和 `PG_PASSWORD` 都是启动必填项，不要把真实密码写入配置文件或提交到仓库。`OPENAI_API_KEY` 用于 Chat，`EMBEDDING_API_KEY` 用于 Embedding；本机 omlx 两个接口都需要认证，其他不要求认证的 Embedding 服务可以不设置后者。Embedding 地址、模型和维度分别可通过 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL_NAME`、`EMBEDDING_DIMENSION` 覆盖。
 
 应用首次启动时，`TravelVectorRepository` 会自动执行 `CREATE EXTENSION IF NOT EXISTS vector`、创建 `travel_knowledge_embedding` 表、`model_name` 普通索引和 HNSW `vector_cosine_ops` 索引。PostgreSQL 账号需要能连接目标数据库、创建扩展、建表、建索引并读写向量表；扩展文件需要预先安装在服务器上，具体权限取决于安装方式。
 
-随后应用把 Markdown 片段同步到 MySQL，按照 `content_hash + model_name` 判断向量是否最新，并将缺失或变化的向量幂等写入 pgvector。当前种子数据为 19 个片段、19 条 256 维向量。重复启动不会重复插入相同片段 ID，也不会重复生成未变化的向量。已有向量表不会自动改变维度；启动时若发现现有向量维度与当前 Embedding 不一致，会明确终止启动，避免误写，应用不会自动删表。
+随后应用把 Markdown 片段同步到 MySQL，按照 `chunk_id + content_hash + model_name` 判断向量是否最新，并将缺失或变化的向量幂等写入 pgvector。当前种子数据为 19 个片段、19 条 1024 维 `Qwen3-Embedding-0.6B@1024` 向量。重复启动不会重复插入相同片段 ID，也不会重复生成未变化向量，当前实测第二次启动同步数量为 0。已有向量表不会自动改变维度；启动时若发现现有向量维度与当前 Embedding 不一致，会明确终止启动，避免误写，应用不会自动删表。
 
 ### 调用接口
 
@@ -115,6 +120,7 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 - 一个共享的 `JsonFileAgentStateStore`。
 - 六个 `HarnessAgent`。
 - 每个 Agent 的名称、提示词、最大迭代次数和用户隔离的记忆工作区。
+- 六个 Agent 共享同一个 `TravelRuntimeContextMiddleware`，在每次推理前临时注入运行时信息。
 - 仅保留记忆读取与会话召回工具，不暴露主动保存、文件、Shell、Web、子 Agent 和 Skills 能力。
 
 ### 第四层：业务编排
@@ -123,23 +129,25 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 
 这是项目核心，依次完成：
 
-1. 调用路由 Agent。
-2. 解析 `RouteDecision`。
-3. 只使用用户当前问题检索知识，避免路由理由污染查询。
-4. `TravelKnowledgeService` 生成查询向量，从 pgvector 取候选，经阈值过滤后从 MySQL 批量取回正文。
-5. 按向量顺序、每来源最多 2 个和 Top-K 规则组装带编号的知识材料。
-6. 把知识材料交给对应专家 Agent，再把专家材料和检索知识交给指南 Agent。
-7. 统一追加知识来源并组装 `TravelChatResponse`。
+1. 创建本次请求的 `TravelRequestContext`，再为路由、专家和指南分别创建 `RuntimeContext`。
+2. 调用路由 Agent。
+3. 解析 `RouteDecision`。
+4. 只使用用户当前问题检索知识，避免路由理由污染查询。
+5. `TravelKnowledgeService` 生成查询向量，从 pgvector 取候选，经阈值过滤后从 MySQL 批量取回正文。
+6. 按向量顺序、每来源最多 2 个和 Top-K 规则组装带编号的知识材料。
+7. 把知识材料交给对应专家 Agent，再把专家材料和检索知识交给指南 Agent。
+8. 统一追加知识来源并组装 `TravelChatResponse`。
 
 ### 第五层：RAG 数据链路
 
-阅读 `TravelEmbeddingService`、`DemoFeatureHashEmbeddingService`、`TravelVectorRepository` 和 `TravelVectorConfiguration`。
+阅读 `TravelEmbeddingService`、`OpenAiCompatibleEmbeddingService`、`TravelEmbeddingConfiguration`、`TravelVectorRepository` 和 `TravelVectorConfiguration`。
 
 需要关注：
 
 - MySQL 保存正文，PostgreSQL 保存向量，两库通过 `chunk_id` 关联。
-- 当前唯一 Embedding Bean 的模型标记为 `demo-feature-hash-v3`，维度为 256。
-- 启动时按 `content_hash + model_name` 判断是否最新，通过 `ON CONFLICT (chunk_id)` 幂等写入。
+- 默认真实 Bean 的模型标记为 `Qwen3-Embedding-0.6B@1024`，维度为 1024；演示 Bean 仅在 `demo-embedding` Profile 下启用。
+- `embedDocument` 直接处理知识正文，`embedQuery` 添加 Qwen3 查询指令，两个入口仍使用同一模型和维度。
+- 启动时按 `chunk_id + content_hash + model_name` 判断是否最新，通过 `ON CONFLICT (chunk_id)` 幂等写入。
 - 查询 SQL 使用 `embedding <=> CAST(? AS vector)`，应用层将余弦距离转换为 `1 - distance`。
 - `score` 先将相似度限制在 0–1，再换算为 0–100 的相似度百分比；候选阈值和候选数量由 `travel.rag.vector` 配置。
 
@@ -207,6 +215,8 @@ specialists.put(AgentType.HOTEL, createAgent(
         model,
         stateStore,
         properties.getMemoryWorkspaceDirectory(),
+        memoryConfig,
+        contextMiddleware,
         4,
         false));
 ```
@@ -246,46 +256,110 @@ specialists.put(AgentType.HOTEL, createAgent(
 | `travel.agent.stream` | 控制 Chat 模型内部生成方式，不代表 HTTP SSE |
 | `travel.agent.state-directory` | 会话状态保存目录，需要隔离不同环境时修改 |
 | `travel.agent.memory-workspace-directory` | 长期记忆工作区，默认 `.agentscope-data/travel-memory` |
+| `travel.context.time-zone` | 动态时间提示使用的 IANA 时区，默认 `Asia/Shanghai` |
 | `travel.rag.knowledge-pattern` | Markdown 初始化素材的匹配规则 |
 | `travel.rag.top-k` | 默认返回片段数量，范围 1 到 10 |
+| `travel.rag.embedding.base-url` | Embedding 服务地址，可通过 `EMBEDDING_BASE_URL` 覆盖 |
+| `travel.rag.embedding.api-key` | 通过 `EMBEDDING_API_KEY` 注入；不要求认证的服务可为空 |
+| `travel.rag.embedding.model-name` | Embedding 模型名称，可通过 `EMBEDDING_MODEL_NAME` 覆盖 |
+| `travel.rag.embedding.dimension` | 向量维度，默认 1024，可通过 `EMBEDDING_DIMENSION` 覆盖 |
+| `travel.rag.embedding.timeout-seconds` | Embedding HTTP 连接和读取超时 |
 | `travel.rag.vector.url` | PostgreSQL JDBC 地址，可通过 `PG_URL` 覆盖 |
 | `travel.rag.vector.username` | PostgreSQL 用户名，可通过 `PG_USER` 覆盖 |
 | `travel.rag.vector.password` | 从必填的 `PG_PASSWORD` 环境变量读取 |
-| `travel.rag.vector.min-similarity` | 最低余弦相似度，范围 0 到 1，当前为 `0.15` |
+| `travel.rag.vector.min-similarity` | 最低余弦相似度，真实 Qwen3 模型默认 `0.45`；演示哈希需显式设为 `0.15` |
 | `travel.rag.vector.candidate-limit` | pgvector 候选上限，当前为 `20` |
 | `spring.datasource.url` | MySQL 业务库地址 |
 | `spring.datasource.username` | MySQL 用户名，可通过 `MYSQL_USER` 覆盖 |
 | `spring.datasource.password` | 从必填的 `MYSQL_PASSWORD` 环境变量读取 |
 | `spring.jpa.hibernate.ddl-auto` | 当前为 `update`，仅建议本地学习使用 |
 
-`TravelAgentProperties`、`TravelRagProperties` 和 `TravelVectorProperties` 中的字段默认值与 YAML 配置共同决定最终参数。
+`TravelAgentProperties`、`TravelRagProperties`、`TravelEmbeddingProperties`、`TravelVectorProperties` 和 `TravelContextProperties` 中的字段默认值与 YAML 配置共同决定最终参数。
 
-### 替换为真实 Embedding 模型
+### 切换 Embedding 模型与迁移向量表
 
-当前 `DemoFeatureHashEmbeddingService` 的模型标记为 `demo-feature-hash-v3`，只用于跑通链路：它先转小写并过滤“推荐、当地、怎么、如何”等泛化短语，再基于 SHA-256 特征哈希、中文二元词和英文词生成 256 维 L2 归一化向量，不理解同义词和完整语义，不能把演示分数当作真实模型效果。替换时按以下步骤操作：
+默认真实实现是 `OpenAiCompatibleEmbeddingService`，使用 `@Profile("!demo-embedding")`；256 维 `DemoFeatureHashEmbeddingService` 使用 `@Profile("demo-embedding")`。两者互斥，每个环境只能有一个 `TravelEmbeddingService` Bean。真实模型标记由“模型名称 + @ + 维度”组成，当前为 `Qwen3-Embedding-0.6B@1024`。
 
-1. **新增实现**：新增一个 `TravelEmbeddingService` 实现，返回真实模型的固定维度、模型标记和文本向量。知识同步与查询都继续注入这一个接口，不要在两处分别调用不同模型。
-2. **保证唯一 Bean**：移除 Demo 实现的 `@Service`，或给 Demo 与真实实现配置互斥 `@Profile`。任何运行环境都必须恰好只有一个 `TravelEmbeddingService` Bean，否则 Spring 注入会失败。
-3. **区分版本**：`getModelName()` 必须能区分算法和模型版本，例如包含 Embedding 模型名称及版本；不要沿用 `demo-feature-hash-v3`，也不要只写一个可能升级的宽泛名称。
-4. **统一文档与查询**：文档向量使用“标题 + 换行 + 正文”，查询向量使用用户当前问题，二者必须来自同一实现、同一版本和同一维度。同步修改本文档、查询 SQL 和核对命令中的模型标记。
-5. **处理旧向量**：停止应用并确认目标数据库。先备份 `travel_knowledge_embedding`，再按维度决定处理方式，不能让应用自动删表。
-6. **重建并验证**：重新启动应用，让它按新模型重建向量；随后执行单元测试，并核对模型标记、维度、唯一 `chunk_id` 数量、索引和独立检索结果。
+切换模型时按以下步骤操作：
 
-维度变化时，`CREATE TABLE IF NOT EXISTS` 不会修改已有的 `VECTOR(256)`。确认并备份后，手工删除旧表，再启动应用按新维度自动建表：
+1. **核对服务**：通过 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL_NAME`、`EMBEDDING_DIMENSION` 和可选的 `EMBEDDING_API_KEY` 指向新服务，不把真实密钥写入 YAML。
+2. **区分文档与查询**：知识同步调用 `embedDocument`，查询调用 `embedQuery`。当前 Qwen3 查询会添加检索指令，二者必须使用同一模型、版本和维度。
+3. **停止写入**：停止应用，确认 `PG_URL` 指向正确数据库，记录当前表数量、模型标记和维度。
+4. **保留旧表**：`CREATE TABLE IF NOT EXISTS` 不会修改已有 `VECTOR(256)`。优先重命名旧表及其索引，而不是直接 `DROP TABLE`。
+5. **重建并验证**：重新启动应用，让它按新维度自动建表并生成向量；核对数量、维度、模型标记、索引、幂等和检索结果。
 
-```sql
--- 仅在确认目标数据库并完成备份后，由数据库管理员手工执行。
-DROP TABLE travel_knowledge_embedding;
-```
-
-即使维度不变，也建议换模型后先备份，再手工清表并重新启动，让应用重建全部向量，避免旧模型记录残留：
+2026-11-27 已按以下方式完成 256→1024 迁移。旧表名带日期，重复操作前必须先检查目标备份表是否已存在：
 
 ```sql
--- 仅在确认目标数据库并完成备份后，由数据库管理员手工执行。
-TRUNCATE TABLE travel_knowledge_embedding;
+BEGIN;
+
+ALTER TABLE travel_knowledge_embedding
+RENAME TO travel_knowledge_embedding_demo256_backup_20261127;
+
+ALTER TABLE travel_knowledge_embedding_demo256_backup_20261127
+RENAME CONSTRAINT travel_knowledge_embedding_pkey
+TO travel_knowledge_embedding_demo256_backup_20261127_pkey;
+
+ALTER INDEX idx_travel_knowledge_embedding_model
+RENAME TO travel_knowledge_embedding_demo256_backup_20261127_model_idx;
+
+ALTER INDEX idx_travel_knowledge_embedding_hnsw
+RENAME TO travel_knowledge_embedding_demo256_backup_20261127_hnsw_idx;
+
+COMMIT;
 ```
 
-应用只创建不存在的表和索引，不提供自动删表或自动迁移向量维度的功能。启动时若检测到现有向量维度与当前实现不一致，会明确失败并提示人工备份、重建，不会继续写入。MySQL 的 `travel_knowledge_chunk` 正文不受影响，不需要随之删除。
+随后应用自动创建新的 `travel_knowledge_embedding` 表、`VECTOR(1024)` 列和正式索引，并从 MySQL 生成 19 条真实向量。核对结果：
+
+```sql
+SELECT COUNT(*) AS vector_count,
+       COUNT(DISTINCT chunk_id) AS unique_chunks,
+       MIN(vector_dims(embedding)) AS min_dimension,
+       MAX(vector_dims(embedding)) AS max_dimension
+FROM travel_knowledge_embedding;
+
+SELECT COUNT(*) AS backup_count,
+       MIN(vector_dims(embedding)) AS backup_dimension
+FROM travel_knowledge_embedding_demo256_backup_20261127;
+```
+
+当前正式表应为 19 条唯一片段、最小和最大维度均为 1024；备份表应保留 19 条、256 维。MySQL `travel_knowledge_chunk` 不受影响，不需要删除。
+
+如需回滚，先停止应用并确认新表数据已完整生成。下面通过再次重命名保留 1024 新表，避免直接删除：
+
+```sql
+BEGIN;
+
+ALTER TABLE travel_knowledge_embedding
+RENAME CONSTRAINT travel_knowledge_embedding_pkey
+TO travel_knowledge_embedding_qwen1024_rollback_20261127_pkey;
+
+ALTER INDEX idx_travel_knowledge_embedding_model
+RENAME TO idx_travel_knowledge_embedding_qwen1024_rollback_model;
+
+ALTER INDEX idx_travel_knowledge_embedding_hnsw
+RENAME TO idx_travel_knowledge_embedding_qwen1024_rollback_hnsw;
+
+ALTER TABLE travel_knowledge_embedding
+RENAME TO travel_knowledge_embedding_qwen1024_rollback_20261127;
+
+ALTER TABLE travel_knowledge_embedding_demo256_backup_20261127
+RENAME TO travel_knowledge_embedding;
+
+ALTER TABLE travel_knowledge_embedding
+RENAME CONSTRAINT travel_knowledge_embedding_demo256_backup_20261127_pkey
+TO travel_knowledge_embedding_pkey;
+
+ALTER INDEX travel_knowledge_embedding_demo256_backup_20261127_model_idx
+RENAME TO idx_travel_knowledge_embedding_model;
+
+ALTER INDEX travel_knowledge_embedding_demo256_backup_20261127_hnsw_idx
+RENAME TO idx_travel_knowledge_embedding_hnsw;
+
+COMMIT;
+```
+
+回滚后使用 `SPRING_PROFILES_ACTIVE=demo-embedding`，并显式设置 `--travel.rag.vector.min-similarity=0.15`。演示 Profile 必须连接独立的 256 维演示数据库，不能指向当前 1024 维正式库。应用只创建不存在的表和索引，不提供自动删表或自动迁移向量维度的功能；启动时检测到维度不一致会明确失败。
 
 ## 6. 会话、长期记忆与隔离调试
 
@@ -320,6 +394,19 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 当前 HTTP 用户 ID 固定为 `local-demo-user`，不要把它当作完整的用户认证方案。工作区已经支持按 `userId` 隔离，但正式接入时必须从认证上下文获取用户 ID，不能接受请求体随意传入的身份。完整说明见 [长期记忆学习指南](04-long-term-memory-guide.md)。
 
+### 单次运行时上下文调试
+
+`TravelRuntimeContextFactoryTest` 和 `TravelRuntimeContextMiddlewareTest` 覆盖以下边界：
+
+- 同一次请求的 Router、专家和 Guide 共享同一个 `TravelRequestContext`。
+- 每次请求生成不同的 `requestId`，不会把上次请求属性带到本次调用。
+- 业务 `sessionId` 与 Agent 会话 ID 分开，六个 Agent 的状态仍按各自命名空间保存。
+- 动态提醒包含当前时间、时区和渠道，不包含 `requestId`。
+- 提醒消息标记 `METADATA_SYNTHETIC=true`，只进入当前 `ReasoningInput`，原始消息列表保持不变。
+- 缺少旅游请求元数据时中间件直接委托，不强行注入空提示。
+
+需要打开链路日志时使用 debug 级别；日志中的 `requestId`、`agentSessionId` 和 `agent` 可用于定位调用阶段。不要为了调试把 `requestId`、内部路径或完整运行时对象加入模型提示。
+
 ## 7. 接入实时工具
 
 当前 Agent 只保留记忆读取与会话召回工具，不提供天气、地图、搜索等外部工具。长期记忆由 Guide 的自动 hooks 写入，所有 Agent 都没有 `memory_save` 工具。
@@ -348,15 +435,16 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 - JDK 是否为 21。
 - 本地模型服务是否启动。
-- `base-url` 是否可访问。
-- `model-name` 是否与模型列表一致。
-- `api-key` 是否满足本地服务要求。
+- Chat 和 Embedding 的 `base-url` 是否都可访问。
+- Chat 的 `model-name`、Embedding 的 `model-name` 和 `dimension` 是否与模型列表及实际输出一致。
+- `OPENAI_API_KEY` 是否满足 Chat 服务要求；本机 omlx 还需要提供 `EMBEDDING_API_KEY`。
 - 配置中的温度和 Token 数是否在校验范围内。
 - MySQL 是否已创建目标数据库，`MYSQL_PASSWORD` 是否已设置且账号允许连接。
 - `PG_URL`、`PG_USER` 是否指向正确数据库，必填的 `PG_PASSWORD` 是否已设置。
 - PostgreSQL 服务器是否已安装 pgvector 0.8.2，账号是否有创建扩展、表和索引的权限。
 - MySQL `travel_knowledge_chunk` 是否成功创建并加载 19 个片段。
-- PostgreSQL `travel_knowledge_embedding` 是否存在，向量维度和索引是否符合当前 Embedding 实现。
+- PostgreSQL `travel_knowledge_embedding` 是否存在，向量维度、模型标记和索引是否符合当前 Embedding 实现。
+- 若从演示 Profile 切换回真实模型，确认 `PG_URL` 指向 1024 维正式库，而不是 256 维演示库。
 
 ### 路由结果总是 GENERAL
 
@@ -378,7 +466,7 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 ### 旅游问答没有使用知识
 
-先调用 `/api/travel/knowledge/search` 确认是否命中，再检查 `travel.rag.vector.min-similarity`、`travel.rag.vector.candidate-limit` 和 `travel.rag.top-k`。同时核对 MySQL 片段数量、PostgreSQL 当前模型的向量数量与维度，具体 SQL 见 [RAG 学习指南](03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。当前特征哈希 Embedding 不理解真正语义，同义表达命中差时应先替换模型，不要仅凭调低阈值判断链路正常。问答接口不会返回独立检索的原始过程，但响应的 `knowledgeSources` 可以说明本次检索到并交给 Agent 的片段。
+先调用 `/api/travel/knowledge/search` 确认是否命中，再检查 `travel.rag.vector.min-similarity`、`travel.rag.vector.candidate-limit` 和 `travel.rag.top-k`。同时核对 MySQL 片段数量、PostgreSQL 当前模型的向量数量与维度，具体 SQL 见 [RAG 学习指南](03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。真实 Qwen3 模型的默认阈值 `0.45` 已按美食、预算、安全和无关查询校准；如果仍然误命中，先检查知识库是否缺少对应主题，不要只靠继续调阈值。问答接口不会返回独立检索的原始过程，但响应的 `knowledgeSources` 可以说明本次检索到并交给 Agent 的片段。
 
 ### 答案缺少知识引用
 
@@ -401,10 +489,14 @@ TRUNCATE TABLE travel_knowledge_embedding;
 
 修改完成后至少验证：
 
-- [ ] Maven 干净打包成功，25 个单元测试全部通过。
-- [ ] 本地 Chat 模型列表可以访问。
+- [ ] Maven 干净打包成功，39 个单元测试全部通过。
+- [ ] `travel.context.time-zone` 使用有效 IANA 时区，空值时启动校验失败。
+- [ ] 本地 Chat 和 Embedding 模型列表都可以访问，所需密钥只通过环境变量提供。
 - [ ] MySQL `travel_knowledge_chunk` 中有 19 个知识片段。
-- [ ] PostgreSQL `travel_knowledge_embedding` 中有 19 条唯一 `chunk_id`，当前模型均为 256 维，普通索引和 HNSW 索引存在。
+- [ ] PostgreSQL `travel_knowledge_embedding` 中有 19 条唯一 `chunk_id`，均为 1024 维 `Qwen3-Embedding-0.6B@1024`，普通索引和 HNSW 索引存在。
+- [ ] `travel_knowledge_embedding_demo256_backup_20261127` 保留 19 条 256 维演示向量。
+- [ ] 重复启动时向量同步数量为 0。
+- [ ] 真实模型美食、预算和安全查询命中预期来源，感冒、红烧肉和股票等无关查询返回空结果。
 - [ ] 独立检索已知问题返回非空结果，`score` 在 0–100 之间。
 - [ ] 独立检索未知问题返回空 `results` 和 `totalMatches: 0`。
 - [ ] 行程问题路由到 `ITINERARY`。
@@ -415,6 +507,9 @@ TRUNCATE TABLE travel_knowledge_embedding;
 - [ ] Guide 自动生成每日记忆日志，且没有 `Memory Save` 重复段落。
 - [ ] 异步整理或补偿整理生成 `MEMORY.md` 和 `.consolidation_state`。
 - [ ] 同一用户不同 `sessionId` 可以召回同一偏好。
+- [ ] 同一次问答的 Router、专家和 Guide 共享请求元数据，但 Agent 会话 ID 保持独立。
+- [ ] 不同问答生成不同 `requestId`，动态时间提示不向模型暴露该标识。
+- [ ] synthetic 运行时提醒不修改原始消息列表，不进入持久化状态或长期记忆。
 - [ ] 描述长期记忆的句子不添加 RAG 引用编号。
 - [ ] 不同 `userId` 的记忆目录和真实模型回答互相隔离。
 - [ ] 非法 `sessionId` 返回 HTTP 400。

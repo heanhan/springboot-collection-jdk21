@@ -24,7 +24,8 @@ public class TravelVectorProperties {
 
     @Min(0)
     @Max(1)
-    private double minSimilarity = 0.15D;
+    // 根据本机 Qwen3 Embedding 的旅游检索样本校准，更换模型或知识库后需要重新评估。
+    private double minSimilarity = 0.45D;
 
     @Min(1)
     @Max(100)

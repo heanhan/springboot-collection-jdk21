@@ -2,7 +2,7 @@
 
 本文说明当前旅游 Demo 的模块职责、六个 Agent 的协作方式、结构化输出、会话状态、长期记忆和异常兜底。
 
-> RAG 第 2 阶段已经完成：路由后执行 pgvector 检索，MySQL 正文回查后的材料进入专家和指南 Agent，最终响应返回可追溯的知识来源。当前使用 256 维特征哈希演示 Embedding，向量生成、检索算法和学习方法见 [RAG 学习指南](03-rag-learning-guide.md)。
+> RAG 第 2 阶段已经完成：路由后执行 pgvector 检索，MySQL 正文回查后的材料进入专家和指南 Agent，最终响应返回可追溯的知识来源。当前默认使用 `Qwen3-Embedding-0.6B@1024` 真实 Embedding，旧的 256 维演示实现仅在 `demo-embedding` Profile 下保留。向量生成、迁移和检索算法见 [RAG 学习指南](03-rag-learning-guide.md)。
 
 ## 1. 模块边界
 
@@ -26,11 +26,18 @@ springboot-agent-scope-travel
 ├── agent
 │   ├── TravelAgentPrompts
 │   └── TravelAgentTeam
+├── context
+│   ├── TravelRequestContext
+│   ├── TravelRuntimeContextFactory
+│   └── TravelRuntimeContextMiddleware
 ├── rag
 │   ├── TravelKnowledgeService
 │   │   启动时同步 MySQL 正文并同步 pgvector 向量
 │   ├── TravelEmbeddingService
+│   ├── OpenAiCompatibleEmbeddingService
 │   ├── DemoFeatureHashEmbeddingService
+│   ├── OpenAiEmbeddingRequest
+│   ├── OpenAiEmbeddingResponse
 │   ├── TravelVectorRepository
 │   ├── TravelKnowledgeChunk
 │   └── TravelKnowledgeChunkRepository
@@ -38,8 +45,11 @@ springboot-agent-scope-travel
     ├── TravelAgentConfiguration
     ├── TravelAgentProperties
     ├── TravelRagProperties
+    ├── TravelEmbeddingConfiguration
+    ├── TravelEmbeddingProperties
     ├── TravelVectorConfiguration
-    └── TravelVectorProperties
+    ├── TravelVectorProperties
+    └── TravelContextProperties
 ```
 
 API 模块不依赖 AgentScope，只负责公共数据结构。Travel 模块负责模型接入、Agent 创建、状态存储和 HTTP 业务编排。
@@ -55,7 +65,7 @@ API 模块不依赖 AgentScope，只负责公共数据结构。Travel 模块负�
 | `travel-general` | 处理不明确或无法归类的旅游问题 | 4 | Markdown 文本 |
 | `travel-guide` | 将专家材料整理为统一旅游指南 | 4 | Markdown 文本 |
 
-所有 Agent 都由 `TravelAgentConfiguration#createAgent` 创建，当前使用 `HarnessAgent`。Toolkit 仅保留 `memory_search`、`memory_get`、`session_search`、`session_list`、`session_history` 五个记忆读取和会话召回工具；`memory_save`、`wait_async_results` 以及文件、Shell、Web、子 Agent 和 Skills 能力均已关闭。长期记忆统一由 Guide 的自动 hooks 写入。
+所有 Agent 都由 `TravelAgentConfiguration#createAgent` 创建，当前使用 `HarnessAgent`。Toolkit 仅保留 `memory_search`、`memory_get`、`session_search`、`session_list`、`session_history` 五个记忆读取和会话召回工具；`memory_save`、`wait_async_results` 以及文件、Shell、Web、子 Agent 和 Skills 能力均已关闭。长期记忆统一由 Guide 的自动 hooks 写入。六个 Agent 共享运行时上下文 Middleware，但仍显式 `disableCompaction()` 和 `disableToolResultEviction()`，本次不改变长对话压缩与工具结果卸载策略。
 
 ## 3. 请求处理时序
 
@@ -70,7 +80,8 @@ TravelChatController
   ▼
 TravelGuideService#chat
   │
-  │ 1. router.call(List<Msg>, RouteDecision.class, routerContext)
+  │ 1. 创建 TravelRequestContext，并派生 Router / Specialist / Guide 的 RuntimeContext
+  │ 2. router.call(List<Msg>, RouteDecision.class, routerContext)
   ▼
 travel-router
   │
@@ -78,7 +89,7 @@ travel-router
   ▼
 TravelGuideService
   │
-  │ 2. knowledgeService.search(message)
+  │ 3. knowledgeService.search(message)
   ▼
 TravelKnowledgeService
   │
@@ -92,7 +103,7 @@ TravelKnowledgeService
   ▼
 TravelGuideService
   │
-  │ 3. specialists.get(targetAgent).call(specialistInput, specialistContext)
+  │ 4. specialists.get(targetAgent).call(specialistInput, specialistContext)
   │   输入包含 [1]、[2] 等编号的检索材料
   ▼
 对应专家 Agent
@@ -101,7 +112,7 @@ TravelGuideService
   ▼
 TravelGuideService
   │
-  │ 4. guide.call(guideInput, guideContext)
+  │ 5. guide.call(guideInput, guideContext)
   │   输入同时包含专家材料和检索材料
   ▼
 travel-guide
@@ -110,7 +121,7 @@ travel-guide
   ▼
 TravelGuideService
   │
-  │ 5. 统一追加知识来源，组装 knowledgeSources
+  │ 6. 统一追加知识来源，组装 knowledgeSources
   ▼
 TravelChatResponse
 ```
@@ -157,7 +168,7 @@ agents.getRouter()
 
 传给专家的信息包括：
 
-- 当前日期。
+- 由运行时中间件统一注入的当前时间、时区和请求渠道。
 - 用户当前问题。
 - 路由阶段保留的上下文。
 - 独立标注的 `MEMORY.md` 长期记忆，明确禁止添加知识引用。
@@ -218,6 +229,22 @@ travel-guide-chengdu-001
 
 当前 HTTP 请求使用固定用户 ID `local-demo-user`，因此接口暂时没有真实多用户入口；Harness 工作区本身已按 `userId` 隔离。正式接入认证后，应从认证上下文取得用户 ID，不能信任请求体随意传入的 `userId`。
 
+### 单次请求的 RuntimeContext
+
+`TravelRuntimeContextFactory` 在每次 `chat` 开始时创建一个 `TravelRequestContext`，再为三个调用阶段派生 `RuntimeContext`：
+
+| 元数据 | 用途 | 是否持久化 |
+| --- | --- | --- |
+| `requestId` | 串联日志和本次调用链，不放入模型提示 | 否 |
+| `userId` | 选择用户隔离的工作区和记忆目录 | 属性本身不持久化，只用于定位状态和记忆 |
+| 业务 `sessionId` | 对应 HTTP 请求中的游客会话 | 属性本身不持久化，用于派生 Agent 会话 ID |
+| `channel` | 标识请求来源，当前为 `http` | 否 |
+| `zoneId` | 生成当前时间、时区提示 | 否 |
+
+类型化的 `TravelRequestContext` 和字符串属性 `request_id` 都放在 `RuntimeContext` 中，只供当前调用期间的 Middleware、hooks 和 tools 读取。Router、专家和 Guide 共享同一个请求元数据对象，但分别使用 `travel-router-*`、`travel-${agentType}-*` 和 `travel-guide-*` 会话 ID。
+
+`TravelRuntimeContextMiddleware` 在 `onReasoning` 中复制消息列表并临时追加一条 synthetic 提醒，包含当前时间、时区和渠道。该提醒不修改原始输入，不写入 `AgentState` 或长期记忆，也不会进入 RAG 引用编号体系。`onAgent` 只记录带 `requestId` 的 debug 日志，不把请求标识交给模型。
+
 ## 5. 模型与配置
 
 `TravelAgentConfiguration#travelModel` 使用 `OpenAIChatModel`，把本地 OpenAI 兼容服务封装为 AgentScope 的 `Model`。
@@ -236,7 +263,9 @@ travel-guide-chengdu-001
 
 `TravelAgentProperties` 使用 `@ConfigurationProperties` 绑定 `travel.agent` 前缀，并通过 `@Validated` 校验密钥、温度、Token 数和超时时间。
 
-`TravelVectorProperties` 绑定 `travel.rag.vector`，通过 `@Validated` 校验 PostgreSQL 地址、用户名和必填密码。`TravelVectorConfiguration` 为该前缀创建独立的 PostgreSQL `JdbcTemplate`，不会替换 Spring Data JPA 的 MySQL 数据源。当前相似度阈值为 `0.15`，候选上限为 `20`。
+`TravelEmbeddingProperties` 绑定 `travel.rag.embedding`，配置 OpenAI 兼容地址、可选密钥、模型名称、维度、超时和 Qwen3 查询指令；`TravelEmbeddingConfiguration` 为其创建独立的 `RestClient`。`TravelVectorProperties` 绑定 `travel.rag.vector`，通过 `@Validated` 校验 PostgreSQL 地址、用户名和必填密码。`TravelVectorConfiguration` 为该前缀创建独立的 PostgreSQL `JdbcTemplate`，不会替换 Spring Data JPA 的 MySQL 数据源。当前真实模型相似度阈值为 `0.45`，候选上限为 `20`。
+
+`TravelContextProperties` 绑定 `travel.context.time-zone`，默认 `Asia/Shanghai`，用于动态时间提示；空值会被配置校验拒绝。
 
 ## 6. MySQL 与 pgvector 的分工
 
@@ -260,7 +289,9 @@ travel-guide-chengdu-001
 
 PostgreSQL 账号必须能创建扩展、表和索引，并读写向量表；pgvector 扩展文件必须已安装到数据库服务器。已有向量表不会随 Embedding 维度自动变更，应用也不会自动删表；启动时若检测到维度不一致，会明确失败并要求人工备份、重建向量表。
 
-当前 `DemoFeatureHashEmbeddingService` 先转小写并过滤“推荐、当地、怎么、如何”等泛化短语，再使用 SHA-256 特征哈希、中文二元词和英文词生成 256 维 L2 归一化向量，模型标记为 `demo-feature-hash-v3`。它只验证工程链路，不具备真正的语义理解。真实模型替换时必须保证文档向量与查询向量使用同一实现和模型版本。
+默认真实实现 `OpenAiCompatibleEmbeddingService` 使用 `@Profile("!demo-embedding")`，通过 `POST {baseUrl}/embeddings` 请求 `Qwen3-Embedding-0.6B`。`embedDocument` 直接发送“标题 + 换行 + 正文”；`embedQuery` 在用户问题前添加 Qwen3 检索指令，不把路由理由拼入查询。响应必须包含 `index=0`、维度一致、非空且有限的向量，适配层随后做 L2 归一化，模型标记为 `Qwen3-Embedding-0.6B@1024`。`DemoFeatureHashEmbeddingService` 使用 `@Profile("demo-embedding")`，仅用于独立演示数据库，不参与默认正式检索。
+
+2026-11-27 已完成 256→1024 迁移：旧表和索引已重命名为 `travel_knowledge_embedding_demo256_backup_20261127`，新表保存 19 条真实向量，第二次启动同步数量为 0。备份保留、模型切换和回滚 SQL 见 [开发与扩展指南](02-development-guide.md#切换-embedding-模型与迁移向量表)。
 
 ## 7. 兜底策略
 
@@ -311,13 +342,19 @@ PostgreSQL 账号必须能创建扩展、表和索引，并读写向量表；pgv
 - [TravelAgentConfiguration.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelAgentConfiguration.java)
 - [TravelAgentPrompts.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/agent/TravelAgentPrompts.java)
 - [TravelGuideService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/service/TravelGuideService.java)
+- [TravelRequestContext.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/context/TravelRequestContext.java)
+- [TravelRuntimeContextFactory.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/context/TravelRuntimeContextFactory.java)
+- [TravelRuntimeContextMiddleware.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/context/TravelRuntimeContextMiddleware.java)
 - [TravelKnowledgeService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelKnowledgeService.java)
 - [TravelEmbeddingService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelEmbeddingService.java)
+- [OpenAiCompatibleEmbeddingService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/OpenAiCompatibleEmbeddingService.java)
 - [DemoFeatureHashEmbeddingService.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/DemoFeatureHashEmbeddingService.java)
 - [TravelVectorRepository.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/rag/TravelVectorRepository.java)
 - [TravelChatController.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/controller/TravelChatController.java)
 - [TravelKnowledgeController.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/controller/TravelKnowledgeController.java)
 - [TravelAgentProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelAgentProperties.java)
 - [TravelRagProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelRagProperties.java)
+- [TravelEmbeddingConfiguration.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelEmbeddingConfiguration.java)
+- [TravelEmbeddingProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelEmbeddingProperties.java)
 - [TravelVectorConfiguration.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelVectorConfiguration.java)
 - [TravelVectorProperties.java](../springboot-agent-scope-travel/src/main/java/com/example/agentscope/travel/config/TravelVectorProperties.java)

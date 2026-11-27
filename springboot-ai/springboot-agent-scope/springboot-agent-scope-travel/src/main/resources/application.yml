@@ -2,9 +2,9 @@ spring:
   application:
     name: springboot-agent-scope-travel
   datasource:
-    url: jdbc:mysql://172.16.75.105:3306/${MYSQL_DATABASE:travel_rag}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD}
+    url: jdbc:mysql://172.16.75.105:3306/travel_rag?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: "root"
+    password: "abcd@123456"
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -13,10 +13,12 @@ spring:
     show-sql: false
 
 travel:
+  context:
+    time-zone: Asia/Shanghai
   agent:
-    api-key: ${OPENAI_API_KEY:}
-    base-url: http://127.0.0.1:8000/v1
-    model-name: Qwen3.6-35B-A3B-5bit
+    api-key: "qwertyuiop"
+    base-url: "http://127.0.0.1:8000/v1"
+    model-name: "Qwen3.6-35B-A3B-5bit"
     stream: true
     temperature: 0.2
     max-tokens: 2048
@@ -27,9 +29,16 @@ travel:
   rag:
     knowledge-pattern: classpath*:knowledge/travel/*.md
     top-k: 3
+    embedding:
+      base-url: "http://127.0.0.1:8000/v1"
+      api-key: "qwertyuiop"
+      model-name: "Qwen3-Embedding-0.6B"
+      dimension: 1024
+      timeout-seconds: 60
+      query-instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query"
     vector:
-      url: ${PG_URL:jdbc:postgresql://172.16.75.106:5432/postgres}
-      username: ${PG_USER:postgres}
-      password: ${PG_PASSWORD:}
-      min-similarity: 0.15
+      url: "jdbc:postgresql://172.16.75.106:5432/postgres"
+      username: "postgres"
+      password: "postgres"
+      min-similarity: 0.45
       candidate-limit: 20

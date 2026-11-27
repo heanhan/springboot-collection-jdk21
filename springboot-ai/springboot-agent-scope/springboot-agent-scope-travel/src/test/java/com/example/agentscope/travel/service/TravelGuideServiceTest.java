@@ -9,6 +9,9 @@ import com.example.agentscope.travel.api.RouteDecision;
 import com.example.agentscope.travel.api.TravelChatRequest;
 import com.example.agentscope.travel.api.TravelChatResponse;
 import com.example.agentscope.travel.config.TravelAgentProperties;
+import com.example.agentscope.travel.config.TravelContextProperties;
+import com.example.agentscope.travel.context.TravelRequestContext;
+import com.example.agentscope.travel.context.TravelRuntimeContextFactory;
 import com.example.agentscope.travel.rag.TravelKnowledgeService;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
@@ -68,8 +71,10 @@ class TravelGuideServiceTest {
                 guideAgent);
         TravelAgentProperties properties = new TravelAgentProperties();
         properties.setTimeoutSeconds(10);
+        TravelRuntimeContextFactory contextFactory = new TravelRuntimeContextFactory(
+                new TravelContextProperties());
         travelGuideService = spy(new TravelGuideService(
-                team, knowledgeService, properties, MemoryConfig.defaults()));
+                team, knowledgeService, properties, contextFactory, MemoryConfig.defaults()));
         doNothing().when(travelGuideService).scheduleMemoryRepair(any(RuntimeContext.class));
 
         Msg routeMessage = mock(Msg.class);
@@ -107,8 +112,16 @@ class TravelGuideServiceTest {
                 .doesNotContain("用户想了解成都美食");
         assertThat(retrievalCaptor.getValue().getTopK()).isZero();
 
+        ArgumentCaptor<RuntimeContext> routerContextCaptor =
+                ArgumentCaptor.forClass(RuntimeContext.class);
+        verify(router).call(
+                anyList(), eq(RouteDecision.class), routerContextCaptor.capture());
+
         ArgumentCaptor<String> specialistInputCaptor = ArgumentCaptor.forClass(String.class);
-        verify(foodAgent).call(specialistInputCaptor.capture(), any(RuntimeContext.class));
+        ArgumentCaptor<RuntimeContext> specialistContextCaptor =
+                ArgumentCaptor.forClass(RuntimeContext.class);
+        verify(foodAgent).call(
+                specialistInputCaptor.capture(), specialistContextCaptor.capture());
         assertThat(specialistInputCaptor.getValue())
                 .contains("[1] 成都美食指南 - 代表性美食")
                 .contains("[2] 旅行安全 - 饮食卫生")
@@ -117,11 +130,35 @@ class TravelGuideServiceTest {
                 .contains("用户长期记忆（个人上下文，禁止添加知识引用；当前用户消息优先）");
 
         ArgumentCaptor<String> guideInputCaptor = ArgumentCaptor.forClass(String.class);
-        verify(guideAgent).call(guideInputCaptor.capture(), any(RuntimeContext.class));
+        ArgumentCaptor<RuntimeContext> guideContextCaptor =
+                ArgumentCaptor.forClass(RuntimeContext.class);
+        verify(guideAgent).call(guideInputCaptor.capture(), guideContextCaptor.capture());
         assertThat(guideInputCaptor.getValue())
                 .contains("引用要求：保留专家材料中的 [1]、[2] 等知识引用编号")
                 .contains("描述用户长期记忆的句子不得添加引用编号")
                 .contains("片段编号：travel-safety-1");
+
+        TravelRequestContext requestContext = routerContextCaptor.getValue()
+                .get(TravelRequestContext.class);
+        assertThat(requestContext).isNotNull();
+        assertThat(requestContext.getRequestId()).isNotBlank();
+        assertThat(requestContext.getUserId()).isEqualTo("local-demo-user");
+        assertThat(requestContext.getSessionId()).isEqualTo("rag-test-session");
+        assertThat(requestContext.getChannel()).isEqualTo("http");
+        assertThat(requestContext.getZoneId().getId()).isEqualTo("Asia/Shanghai");
+        assertThat(specialistContextCaptor.getValue().get(TravelRequestContext.class))
+                .isSameAs(requestContext);
+        assertThat(guideContextCaptor.getValue().get(TravelRequestContext.class))
+                .isSameAs(requestContext);
+        assertThat(routerContextCaptor.getValue().getSessionId())
+                .isEqualTo("travel-router-rag-test-session");
+        assertThat(specialistContextCaptor.getValue().getSessionId())
+                .isEqualTo("travel-food-rag-test-session");
+        assertThat(guideContextCaptor.getValue().getSessionId())
+                .isEqualTo("travel-guide-rag-test-session");
+        assertThat(routerContextCaptor.getValue()
+                .<String>get(TravelRuntimeContextFactory.REQUEST_ID_ATTRIBUTE))
+                .isEqualTo(requestContext.getRequestId());
 
         assertThat(response.getKnowledgeSources()).containsExactlyElementsOf(sources);
         assertThat(response.getAnswer())

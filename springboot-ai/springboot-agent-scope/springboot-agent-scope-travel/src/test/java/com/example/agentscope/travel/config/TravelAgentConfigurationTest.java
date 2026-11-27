@@ -2,6 +2,7 @@ package com.example.agentscope.travel.config;
 
 import com.example.agentscope.travel.agent.TravelAgentPrompts;
 import com.example.agentscope.travel.agent.TravelAgentTeam;
+import com.example.agentscope.travel.context.TravelRuntimeContextMiddleware;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.state.AgentStateStore;
@@ -150,7 +151,11 @@ class TravelAgentConfigurationTest {
         Model model = mock(Model.class);
         TravelAgentConfiguration configuration = new TravelAgentConfiguration();
         return configuration.travelAgentTeam(
-                model, stateStore, properties, configuration.travelMemoryConfig());
+                model,
+                stateStore,
+                properties,
+                configuration.travelMemoryConfig(),
+                new TravelRuntimeContextMiddleware());
     }
 
     private List<HarnessAgent> allAgents(TravelAgentTeam team) {

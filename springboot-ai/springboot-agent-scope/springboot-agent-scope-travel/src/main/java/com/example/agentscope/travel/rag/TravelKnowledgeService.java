@@ -120,7 +120,7 @@ public class TravelKnowledgeService {
             if (vectorRepository.isUpToDate(chunk.getId(), contentHash)) {
                 continue;
             }
-            float[] embedding = embeddingService.embed(vectorText);
+            float[] embedding = embeddingService.embedDocument(vectorText);
             vectorRepository.upsert(chunk.getId(), contentHash, embedding);
             updatedCount++;
         }
@@ -149,7 +149,7 @@ public class TravelKnowledgeService {
      */
     public KnowledgeSearchResponse search(KnowledgeSearchRequest request) {
         int topK = request.getTopK() > 0 ? request.getTopK() : defaultTopK;
-        float[] queryEmbedding = embeddingService.embed(request.getQuery());
+        float[] queryEmbedding = embeddingService.embedQuery(request.getQuery());
         List<TravelVectorRepository.VectorMatch> matches =
                 vectorRepository.search(queryEmbedding, candidateLimit);
         if (matches.isEmpty()) {
