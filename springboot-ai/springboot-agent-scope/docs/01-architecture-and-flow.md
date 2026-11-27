@@ -39,6 +39,7 @@ springboot-agent-scope-travel
 │   ├── OpenAiEmbeddingRequest
 │   ├── OpenAiEmbeddingResponse
 │   ├── TravelVectorRepository
+│   ├── TravelKnowledgeDocument
 │   ├── TravelKnowledgeChunk
 │   └── TravelKnowledgeChunkRepository
 └── config
@@ -273,16 +274,16 @@ travel-guide-chengdu-001
 
 | 数据库 | 保存内容 | 使用方式 |
 | --- | --- | --- |
-| MySQL 8 | `travel_knowledge_chunk` 中的 19 个知识片段及后续业务数据 | Spring Data JPA；启动同步正文，检索时按 ID 批量回查 |
-| PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 中的 19 条向量 | 独立 JDBC；自动建表、模型版本标记、幂等 upsert、HNSW 余弦检索 |
+| MySQL 8 | `travel_knowledge_chunk` 中的 22 个 `GLOBAL` 通用知识片段及后续业务数据 | Spring Data JPA；启动同步正文，检索时按 ID 批量回查 |
+| PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 中的 22 条向量 | 独立 JDBC；自动建表、模型版本标记、幂等 upsert、HNSW 余弦检索 |
 
 两库通过 `chunk_id` 在应用层关联，不设置跨数据库外键。向量记录缺失或对应 MySQL 正文不存在时，该候选会被跳过。
 
 启动过程：
 
 1. `TravelVectorRepository` 首次启动自动执行 `CREATE EXTENSION IF NOT EXISTS vector`、创建 `travel_knowledge_embedding` 表、`model_name` 普通索引和 HNSW `vector_cosine_ops` 索引。
-2. `TravelKnowledgeService` 读取 `knowledge/travel/*.md` 并分块。
-3. 根据稳定片段 ID 查询 MySQL；不存在时插入，标题、来源或正文变化时更新，不变时跳过。
+2. `TravelKnowledgeService` 读取 `knowledge/travel/*.md` 并分块，当前 Markdown 统一标记为 `GLOBAL`。
+3. 根据稳定片段 ID 查询 MySQL；不存在时插入，标题、来源、`scope` 或正文变化时更新，不变时跳过。
 4. 从 MySQL 读取全部片段，对“标题 + 换行 + 正文”计算 SHA-256 `content_hash`。
 5. 按 `chunk_id + content_hash + model_name` 判断向量是否最新；缺失或变化时调用同一个 Embedding Bean，并以 `ON CONFLICT (chunk_id)` 幂等写入 pgvector。
 6. 问答时生成查询向量，只检索当前 `model_name` 的候选，经阈值、正文回查、来源限制后返回 Top-K。
@@ -291,7 +292,7 @@ PostgreSQL 账号必须能创建扩展、表和索引，并读写向量表；pgv
 
 默认真实实现 `OpenAiCompatibleEmbeddingService` 使用 `@Profile("!demo-embedding")`，通过 `POST {baseUrl}/embeddings` 请求 `Qwen3-Embedding-0.6B`。`embedDocument` 直接发送“标题 + 换行 + 正文”；`embedQuery` 在用户问题前添加 Qwen3 检索指令，不把路由理由拼入查询。响应必须包含 `index=0`、维度一致、非空且有限的向量，适配层随后做 L2 归一化，模型标记为 `Qwen3-Embedding-0.6B@1024`。`DemoFeatureHashEmbeddingService` 使用 `@Profile("demo-embedding")`，仅用于独立演示数据库，不参与默认正式检索。
 
-2026-11-27 已完成 256→1024 迁移：旧表和索引已重命名为 `travel_knowledge_embedding_demo256_backup_20261127`，新表保存 19 条真实向量，第二次启动同步数量为 0。备份保留、模型切换和回滚 SQL 见 [开发与扩展指南](02-development-guide.md#切换-embedding-模型与迁移向量表)。
+2026-11-27 已完成 256→1024 向量迁移，并重整正式知识库：旧成都测试正文和向量已分别备份、删除，当前 MySQL 与正式向量表均为 22 条 `GLOBAL` 通用知识。旧演示向量仍保留在 `travel_knowledge_embedding_demo256_backup_20261127`，成都测试数据备份后缀为 `20261127_180939`。城市问题只返回通用知识，不代表具备城市本地知识。备份保留、模型切换和回滚 SQL 见 [开发与扩展指南](02-development-guide.md#切换-embedding-模型与迁移向量表)。
 
 ## 7. 兜底策略
 

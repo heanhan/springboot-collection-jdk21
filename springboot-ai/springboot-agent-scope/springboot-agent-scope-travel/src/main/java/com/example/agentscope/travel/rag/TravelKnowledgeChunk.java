@@ -35,6 +35,12 @@ public class TravelKnowledgeChunk {
     private String source;
 
     /**
+     * 知识适用范围。GLOBAL 表示不依赖具体目的地的通用知识。
+     */
+    @Column(nullable = false, length = 16, columnDefinition = "VARCHAR(16) NOT NULL DEFAULT 'GLOBAL'")
+    private String scope;
+
+    /**
      * 知识正文，使用 TEXT 列保存较长段落。
      */
     @Lob
@@ -60,12 +66,14 @@ public class TravelKnowledgeChunk {
             String id,
             String title,
             String source,
+            String scope,
             String content,
             LocalDateTime createdAt,
             LocalDateTime updatedAt) {
         this.id = id;
         this.title = title;
         this.source = source;
+        this.scope = scope;
         this.content = content;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -93,6 +101,14 @@ public class TravelKnowledgeChunk {
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     public String getContent() {

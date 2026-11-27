@@ -105,15 +105,22 @@ class TravelKnowledgeServiceTest {
     @Test
     @DisplayName("启动时把 Markdown 知识同步到 MySQL 仓储")
     void startup_synchronizesMarkdownKnowledgeToRepository() {
-        assertThat(storedChunks).hasSize(19);
-        assertThat(storedVectorHashes).hasSize(19);
+        assertThat(storedChunks).hasSize(22);
+        assertThat(storedVectorHashes).hasSize(22);
         assertThat(storedChunks)
                 .extracting(TravelKnowledgeChunk::getSource)
-                .contains("chengdu-food.md", "travel-budget.md", "travel-safety.md");
+                .contains(
+                        "global-itinerary-principles.md",
+                        "global-transport-accommodation.md",
+                        "global-food-guidance.md",
+                        "travel-budget.md",
+                        "travel-safety.md")
+                .doesNotContain("chengdu-food.md", "chengdu-itinerary.md");
         assertThat(storedChunks).allSatisfy(chunk -> {
+            assertThat(chunk.getScope()).isEqualTo("GLOBAL");
             assertThat(chunk.getCreatedAt()).isNotNull();
             assertThat(chunk.getUpdatedAt()).isNotNull();
-            assertThat(chunk.getContent()).isNotBlank();
+            assertThat(chunk.getContent()).isNotBlank().doesNotContain("成都");
         });
     }
 
@@ -126,8 +133,8 @@ class TravelKnowledgeServiceTest {
 
         verify(repository, never()).saveAll(anyList());
         verify(vectorRepository, never()).upsert(anyString(), anyString(), any(float[].class));
-        assertThat(storedChunks).hasSize(19);
-        assertThat(storedVectorHashes).hasSize(19);
+        assertThat(storedChunks).hasSize(22);
+        assertThat(storedVectorHashes).hasSize(22);
     }
 
     @Test
@@ -149,32 +156,50 @@ class TravelKnowledgeServiceTest {
             return savedChunks.size() == 1 && changedId.equals(savedChunks.get(0).getId());
         }));
         verify(vectorRepository).upsert(eq(changedId), anyString(), any(float[].class));
-        assertThat(storedChunks).hasSize(19);
+        assertThat(storedChunks).hasSize(22);
         assertThat(changedChunk.getContent()).isNotEqualTo("已经被人工修改的旧内容");
         assertThat(changedChunk.getCreatedAt()).isEqualTo(createdAt);
         assertThat(changedChunk.getUpdatedAt()).isAfter(previousUpdatedAt);
     }
 
     @Test
-    @DisplayName("成都美食问题优先命中美食知识")
-    void searchChengduFood_returnsFoodKnowledgeFirst() {
-        KnowledgeSearchRequest request = new KnowledgeSearchRequest("成都美食推荐", 3);
+    @DisplayName("饮食问题优先命中通用美食知识")
+    void searchFoodQuestion_returnsFoodKnowledgeFirst() {
+        KnowledgeSearchRequest request = new KnowledgeSearchRequest("旅行饮食卫生和过敏原", 3);
 
         KnowledgeSearchResponse response = travelKnowledgeService.search(request);
 
         assertThat(response.getTotalMatches()).isGreaterThan(0);
-        assertThat(response.getResults().get(0).getSource()).isEqualTo("chengdu-food.md");
+        assertThat(response.getResults().get(0).getSource()).isEqualTo("global-food-guidance.md");
     }
 
     @Test
-    @DisplayName("自然口语美食问题优先命中美食知识")
-    void searchNaturalFoodQuestion_returnsFoodKnowledgeFirst() {
-        KnowledgeSearchRequest request = new KnowledgeSearchRequest("去成都两天，推荐当地火锅和串串", 3);
+    @DisplayName("自然口语饮食问题返回通用美食知识")
+    void searchNaturalFoodQuestion_returnsFoodKnowledge() {
+        KnowledgeSearchRequest request = new KnowledgeSearchRequest("旅行期间如何安排饮食", 3);
 
         KnowledgeSearchResponse response = travelKnowledgeService.search(request);
 
         assertThat(response.getTotalMatches()).isGreaterThan(0);
-        assertThat(response.getResults().get(0).getSource()).isEqualTo("chengdu-food.md");
+        assertThat(response.getResults())
+                .extracting(result -> result.getSource())
+                .contains("global-food-guidance.md");
+    }
+
+    @Test
+    @DisplayName("城市问题只返回通用知识且不再命中成都测试来源")
+    void searchCityQuestion_doesNotReturnRetiredChengduSources() {
+        KnowledgeSearchRequest request = new KnowledgeSearchRequest("成都三天美食预算怎么安排", 3);
+
+        KnowledgeSearchResponse response = travelKnowledgeService.search(request);
+
+        assertThat(response.getResults())
+                .extracting(result -> result.getSource())
+                .doesNotContain("chengdu-food.md", "chengdu-itinerary.md")
+                .allMatch(source -> source.equals("global-food-guidance.md")
+                        || source.equals("travel-budget.md")
+                        || source.equals("global-itinerary-principles.md")
+                        || source.equals("travel-safety.md"));
     }
 
     @Test
@@ -202,7 +227,7 @@ class TravelKnowledgeServiceTest {
     @Test
     @DisplayName("Top-K 限制返回片段数量")
     void searchWithTopK_limitsResultCount() {
-        KnowledgeSearchRequest request = new KnowledgeSearchRequest("成都 美食 预算 安全", 2);
+        KnowledgeSearchRequest request = new KnowledgeSearchRequest("美食 预算 安全", 2);
 
         KnowledgeSearchResponse response = travelKnowledgeService.search(request);
 
@@ -215,17 +240,20 @@ class TravelKnowledgeServiceTest {
     @DisplayName("复合问题不会让单一来源占满全部结果")
     void searchMixedQuestion_keepsSourceDiversity() {
         when(vectorRepository.search(any(float[].class), anyInt())).thenReturn(Arrays.asList(
-                new TravelVectorRepository.VectorMatch("chengdu-food-1", 0.05D),
-                new TravelVectorRepository.VectorMatch("chengdu-food-2", 0.10D),
-                new TravelVectorRepository.VectorMatch("chengdu-itinerary-1", 0.20D),
+                new TravelVectorRepository.VectorMatch("global-food-guidance-1", 0.05D),
+                new TravelVectorRepository.VectorMatch("global-food-guidance-2", 0.10D),
+                new TravelVectorRepository.VectorMatch("global-itinerary-principles-1", 0.20D),
                 new TravelVectorRepository.VectorMatch("travel-budget-1", 0.30D)));
-        KnowledgeSearchRequest request = new KnowledgeSearchRequest("成都三天两夜美食推荐", 3);
+        KnowledgeSearchRequest request = new KnowledgeSearchRequest("三天美食行程预算", 3);
 
         KnowledgeSearchResponse response = travelKnowledgeService.search(request);
 
         assertThat(response.getResults())
                 .extracting(result -> result.getSource())
-                .containsExactly("chengdu-food.md", "chengdu-food.md", "chengdu-itinerary.md");
+                .containsExactly(
+                        "global-food-guidance.md",
+                        "global-food-guidance.md",
+                        "global-itinerary-principles.md");
         assertThat(response.getResults())
                 .extracting(result -> result.getScore())
                 .containsExactly(95, 90, 80);

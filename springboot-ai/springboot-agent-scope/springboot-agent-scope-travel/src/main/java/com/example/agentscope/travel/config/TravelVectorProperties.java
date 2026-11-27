@@ -19,7 +19,7 @@ public class TravelVectorProperties {
     @NotBlank(message = "PostgreSQL 用户名不能为空")
     private String username = "postgres";
 
-    @NotBlank(message = "请通过 PG_PASSWORD 配置 PostgreSQL 密码")
+    @NotBlank(message = "请配置 travel.rag.vector.password")
     private String password;
 
     @Min(0)

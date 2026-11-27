@@ -130,15 +130,7 @@ Chat:     Qwen3.6-35B-A3B-5bit
 Embedding: Qwen3-Embedding-0.6B
 ```
 
-本机 omlx 服务要求 Authorization。下面的占位符只在当前 Shell 中提供，不要写入配置文件或提交到 Git：
-
-```bash
-export OPENAI_API_KEY='<model-api-key>'
-curl http://127.0.0.1:8000/v1/models \
-  -H "Authorization: Bearer ${OPENAI_API_KEY}"
-```
-
-返回结果中应包含配置的 Chat 和 Embedding 模型名称。
+本机 omlx 服务要求 Authorization。使用本机 API 客户端调用 `GET http://127.0.0.1:8000/v1/models`，Authorization 请求头使用 `application.yml` 中配置的实际密钥；返回结果中应包含上述 Chat 和 Embedding 模型名称。本文不展示真实密钥。
 
 ### 2. 检查配置
 
@@ -150,9 +142,9 @@ curl http://127.0.0.1:8000/v1/models \
 
 | 配置项 | 说明 |
 | --- | --- |
-| `travel.agent.api-key` | Chat 模型密钥，通过 `OPENAI_API_KEY` 环境变量注入 |
-| `travel.agent.base-url` | Chat 模型 OpenAI 兼容接口地址，可通过 `OPENAI_BASE_URL` 覆盖 |
-| `travel.agent.model-name` | Chat 模型名称，可通过 `OPENAI_MODEL_NAME` 覆盖 |
+| `travel.agent.api-key` | Chat 模型密钥，直接在 YAML 中配置实际值，不在文档中展示 |
+| `travel.agent.base-url` | Chat 模型 OpenAI 兼容接口地址 |
+| `travel.agent.model-name` | Chat 模型名称 |
 | `travel.agent.stream` | 模型内部是否流式生成 |
 | `travel.agent.temperature` | 生成随机程度 |
 | `travel.agent.max-tokens` | 单次回答最大 Token 数 |
@@ -162,22 +154,22 @@ curl http://127.0.0.1:8000/v1/models \
 | `travel.context.time-zone` | 动态运行时时间提示使用的时区，默认 `Asia/Shanghai` |
 | `travel.rag.knowledge-pattern` | 旅游知识文件匹配规则 |
 | `travel.rag.top-k` | 每次问答默认检索的片段数量 |
-| `travel.rag.embedding.base-url` | Embedding 服务地址，可通过 `EMBEDDING_BASE_URL` 覆盖 |
-| `travel.rag.embedding.api-key` | Embedding 服务密钥，通过 `EMBEDDING_API_KEY` 注入；服务不要求认证时可为空 |
-| `travel.rag.embedding.model-name` | Embedding 模型名称，可通过 `EMBEDDING_MODEL_NAME` 覆盖 |
-| `travel.rag.embedding.dimension` | 向量维度，默认 `1024`，可通过 `EMBEDDING_DIMENSION` 覆盖 |
+| `travel.rag.embedding.base-url` | Embedding 服务地址 |
+| `travel.rag.embedding.api-key` | Embedding 服务密钥，直接在 YAML 中配置，不在文档中展示 |
+| `travel.rag.embedding.model-name` | 当前为 `Qwen3-Embedding-0.6B` |
+| `travel.rag.embedding.dimension` | 当前为 `1024` |
 | `travel.rag.embedding.timeout-seconds` | Embedding HTTP 连接和读取超时 |
 | `travel.rag.vector.min-similarity` | 最低余弦相似度，真实 Qwen3 模型默认 `0.45`，范围 0 到 1 |
 | `travel.rag.vector.candidate-limit` | 每次先从 pgvector 获取的候选数量，当前为 `20` |
-| `travel.rag.vector.url` | PostgreSQL JDBC 地址，可通过 `PG_URL` 覆盖 |
-| `travel.rag.vector.username` | PostgreSQL 用户名，可通过 `PG_USER` 覆盖 |
-| `travel.rag.vector.password` | PostgreSQL 密码，必须通过 `PG_PASSWORD` 提供 |
+| `travel.rag.vector.url` | PostgreSQL JDBC 地址 |
+| `travel.rag.vector.username` | PostgreSQL 用户名 |
+| `travel.rag.vector.password` | PostgreSQL 密码，直接在 YAML 中配置，不在文档中展示 |
 | `spring.datasource.url` | MySQL 业务库连接地址 |
-| `spring.datasource.username` | MySQL 用户名，可通过 `MYSQL_USER` 覆盖 |
-| `spring.datasource.password` | MySQL 密码，必须通过 `MYSQL_PASSWORD` 环境变量提供 |
+| `spring.datasource.username` | MySQL 用户名 |
+| `spring.datasource.password` | MySQL 密码，直接在 YAML 中配置，不在文档中展示 |
 | `spring.jpa.hibernate.ddl-auto` | 当前为 `update`，仅用于本地学习环境自动维护 MySQL 表结构 |
 
-当前示例配置用于本地学习。模型密钥、MySQL 密码和 PostgreSQL 密码均通过环境变量注入，不要将真实密钥提交到共享仓库。
+当前示例配置用于本地学习，所有连接信息和模型密钥都直接写在 YAML 中，不使用 `${ENV:default}` 占位符。该文件包含本机真实凭据，可以本地运行，但提交到共享仓库前必须先脱敏。
 
 ### 3. 构建
 
@@ -197,7 +189,7 @@ CREATE DATABASE IF NOT EXISTS travel_rag
   COLLATE utf8mb4_unicode_ci;
 ```
 
-数据库名和用户名可通过 `MYSQL_DATABASE`、`MYSQL_USER` 覆盖；MySQL 主机地址通过 `spring.datasource.url` 配置或启动参数覆盖，密码只通过 `MYSQL_PASSWORD` 环境变量提供。
+数据库名、用户名、主机地址和密码都在 `spring.datasource.*` 中直接配置实际值，不使用环境变量占位符。
 
 Hibernate 会在首次启动时创建 `travel_knowledge_chunk` 表。应用启动后把类路径中的 Markdown 素材同步到该表。重复启动会按片段 ID 更新已有内容，不会重复插入。
 
@@ -214,21 +206,13 @@ PostgreSQL 账号需要能连接目标数据库，并具备创建扩展、建表
 
 ### 6. 启动
 
-以下值均为占位符，请替换为本机或部署环境自己的配置，不要把真实密码写入命令历史或文档：
+确认 MySQL、PostgreSQL、pgvector 和本地模型服务均可用，且 `application.yml` 中的实际连接信息与凭据配置正确后执行：
 
 ```bash
-export MYSQL_DATABASE='<mysql-database>'
-export MYSQL_USER='<mysql-user>'
-export MYSQL_PASSWORD='<mysql-password>'
-export PG_URL='jdbc:postgresql://<pg-host>:5432/<pg-database>'
-export PG_USER='<pg-user>'
-export PG_PASSWORD='<pg-password>'
-export OPENAI_API_KEY='<chat-model-api-key>'
-export EMBEDDING_API_KEY='<embedding-model-api-key>'
 java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/target/springboot-agent-scope-travel-1.0.jar
 ```
 
-jar 名称已按模块 POM 核对：`artifactId` 为 `springboot-agent-scope-travel`，父 POM 版本为 `1.0`。`MYSQL_PASSWORD` 和 `PG_PASSWORD` 为必填项，缺失或空白时配置校验会阻止应用启动。本机 omlx 的 Chat 和 Embedding 接口都要求认证，因此 `OPENAI_API_KEY` 与 `EMBEDDING_API_KEY` 都需要提供；其他不要求认证的 OpenAI 兼容服务可以不设置 `EMBEDDING_API_KEY`。
+jar 名称已按模块 POM 核对：`artifactId` 为 `springboot-agent-scope-travel`，父 POM 版本为 `1.0`。Chat 和 Embedding 密钥分别读取 `travel.agent.api-key` 与 `travel.rag.embedding.api-key`；数据库密码读取 YAML 中的实际值。配置为空或空白时，配置校验会阻止应用启动。
 
 默认端口为 `8080`。需要切换端口时：
 
@@ -240,16 +224,16 @@ java -jar springboot-ai/springboot-agent-scope/springboot-agent-scope-travel/tar
 
 | 数据库 | 当前职责 | 使用方式 |
 | --- | --- | --- |
-| MySQL 8 | `travel_knowledge_chunk` 保存 19 个知识片段及后续业务数据 | Spring Data JPA；启动时同步 Markdown，检索时按 ID 批量读取正文 |
-| PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 保存 19 条向量，通过 `chunk_id` 关联 MySQL 片段 | 独立 `JdbcTemplate`；应用层建表、幂等 upsert 和余弦距离检索 |
+| MySQL 8 | `travel_knowledge_chunk` 保存 22 个 `GLOBAL` 通用知识片段及后续业务数据 | Spring Data JPA；启动时同步 Markdown，检索时按 ID 批量读取正文 |
+| PostgreSQL 17.9 + pgvector 0.8.2 | `travel_knowledge_embedding` 保存 22 条向量，通过 `chunk_id` 关联 MySQL 片段 | 独立 `JdbcTemplate`；应用层建表、幂等 upsert 和余弦距离检索 |
 
 默认使用 `OpenAiCompatibleEmbeddingService` 调用本地 `Qwen3-Embedding-0.6B`，模型标记为 `Qwen3-Embedding-0.6B@1024`。文档向量直接由“标题 + 换行 + 正文”生成；查询向量按 Qwen3 检索约定添加 `Instruct` 前缀。适配层会校验响应索引、维度、空值、有限数值和零向量，并做 L2 归一化。256 维 `DemoFeatureHashEmbeddingService` 仅保留用于离线演示，通过 `demo-embedding` Profile 启用，与真实实现互斥。
 
 启动同步时，应用对每个片段的“标题 + 正文”计算 `content_hash`，再按 `chunk_id + content_hash + model_name` 判断是否最新；缺失或变化时生成文档向量并通过 `ON CONFLICT (chunk_id)` 幂等更新。检索时只使用用户当前问题生成查询向量：query embed → pgvector 候选 → 相似度阈值过滤 → MySQL `findAllById` 批量取正文 → 按向量顺序输出 → 每来源最多 2 个 → Top-K。SQL 使用 `embedding <=> CAST(? AS vector)` 获取余弦距离，应用层按 `similarity = 1 - distance` 计算相似度，并将分数限制在 0–100。
 
-当前 39 个单元测试全部通过；正式 `travel_knowledge_embedding` 表包含 19 条唯一 `chunk_id`、均为 1024 维的 `Qwen3-Embedding-0.6B@1024` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。旧的 19 条 256 维演示向量完整保留在 `travel_knowledge_embedding_demo256_backup_20261127` 表中。真实 Chat 模型的美食问答已验证 `[1]`、`[2]`、`[3]` 引用和三条 `knowledgeSources`。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
+当前 40 个单元测试全部通过；正式 `travel_knowledge_embedding` 表包含 22 条唯一 `chunk_id`、均为 1024 维的 `Qwen3-Embedding-0.6B@1024` 向量，普通索引和 HNSW 索引已建立，重复启动的向量同步数量为 0。旧的 19 条 256 维演示向量完整保留在 `travel_knowledge_embedding_demo256_backup_20261127` 表中。真实检索已验证成都、上海等城市问题只返回通用知识来源，无关问题返回空结果。数据库核对方法见 [RAG 学习指南](docs/03-rag-learning-guide.md#9-核对-mysql-与-pgvector-数据)。
 
-真实模型的默认阈值校准为 `0.45`：成都小吃召回分数为 54/52，预算问题包含 49/48，高原反应包含 65/49；感冒、红烧肉和股票等无关查询返回空结果。演示哈希向量使用不同分数尺度，如需在独立演示数据库中启用 `demo-embedding` Profile，应显式设置 `--travel.rag.vector.min-similarity=0.15`，不要指向当前 1024 维正式库。
+真实模型的默认阈值保持 `0.45`。当前正式知识库只包含行程原则、交通住宿、饮食常识、预算和安全等 `GLOBAL` 通用知识，不收录城市专属事实；城市问题返回的是通用方法，不代表已经具备该城市的本地知识。演示哈希向量使用不同分数尺度，如需在独立演示数据库中启用 `demo-embedding` Profile，应显式设置 `--travel.rag.vector.min-similarity=0.15`，不要指向当前 1024 维正式库。
 
 ## RAG 知识检索与引用
 
@@ -330,9 +314,9 @@ Content-Type: application/json
   "notice": "本指南由本地模型生成，未实时查询交通、票价、天气或营业信息，出行前请通过官方渠道核实。",
   "knowledgeSources": [
     {
-      "id": "chengdu-food-1",
-      "title": "成都美食指南 - 代表性美食",
-      "source": "chengdu-food.md",
+      "id": "global-food-guidance-1",
+      "title": "通用旅行饮食指南 - 饮食节奏与预算",
+      "source": "global-food-guidance.md",
       "score": 87,
       "content": "这里返回实际检索到的知识正文。"
     }
@@ -412,8 +396,8 @@ curl -X POST http://localhost:8080/api/travel/chat \
 - `RuntimeContext` 扩展属性和 synthetic 运行时提醒不持久化，跨会话仍依赖 AgentState 和长期记忆。
 - 上下文压缩和工具结果卸载仍显式关闭，长对话优化尚未启用。
 - 模型配置支持流式生成，但 HTTP 接口仍返回聚合后的 JSON。
-- 39 个单元测试已通过；真实数据库验证了 19 条唯一 1024 维向量、两类索引、重复启动幂等和阈值校准样本，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回、同一用户跨会话的长期记忆召回、首次补偿整理和不同 `userId` 的记忆隔离，但本地小模型的生成质量仍有限。
-- 阈值不能弥补知识库覆盖不足。例如“成都酒店应该住在哪个区域”仍可能误命中美食片段；应补充酒店住宿知识、拆分标题和段落，而不是单纯继续调阈值。
+- 40 个单元测试已通过；真实数据库验证了 22 条唯一 1024 维 `GLOBAL` 知识向量、两类索引、重复启动幂等和通用检索样本，未知问题返回空结果。真实 Chat 模型已联调验证美食问答的引用与来源返回、同一用户跨会话的长期记忆召回、首次补偿整理和不同 `userId` 的记忆隔离，但本地小模型的生成质量仍有限。
+- 阈值不能弥补知识库覆盖不足。当前不收录城市专属事实，城市问题只能引用通用方法；酒店等主题需要补充对应通用或城市知识，而不是单纯继续调阈值。
 - 本地小模型可能改变用户给出的天数、人数或生成不准确信息，回复中会附带核实提醒。
 
 ## 延伸阅读

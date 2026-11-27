@@ -37,6 +37,8 @@ public class TravelKnowledgeService {
     private static final Logger log = LoggerFactory.getLogger(TravelKnowledgeService.class);
     // 避免单个知识文件占满 Top-K，让不同主题的资料都有机会返回。
     private static final int MAX_CHUNKS_PER_SOURCE = 2;
+    // 当前正式知识库只收录不依赖具体城市的通用知识。
+    private static final String GLOBAL_SCOPE = "GLOBAL";
 
     private final TravelKnowledgeChunkRepository repository;
     private final TravelEmbeddingService embeddingService;
@@ -85,6 +87,7 @@ public class TravelKnowledgeService {
                         document.getId(),
                         document.getTitle(),
                         document.getSource(),
+                        document.getScope(),
                         document.getContent(),
                         now,
                         now));
@@ -93,12 +96,14 @@ public class TravelKnowledgeService {
 
             boolean changed = !Objects.equals(existing.getTitle(), document.getTitle())
                     || !Objects.equals(existing.getSource(), document.getSource())
+                    || !Objects.equals(existing.getScope(), document.getScope())
                     || !Objects.equals(existing.getContent(), document.getContent());
             if (!changed) {
                 continue;
             }
             existing.setTitle(document.getTitle());
             existing.setSource(document.getSource());
+            existing.setScope(document.getScope());
             existing.setContent(document.getContent());
             existing.setUpdatedAt(now);
             chunksToSave.add(existing);
@@ -276,7 +281,8 @@ public class TravelKnowledgeService {
         String content = sectionTitle + "\n" + paragraph.toString().trim();
         String title = documentTitle + " - " + sectionTitle;
         String id = baseName + "-" + (chunks.size() + 1);
-        chunks.add(new TravelKnowledgeDocument(id, title, baseName + ".md", content));
+        chunks.add(new TravelKnowledgeDocument(
+                id, title, baseName + ".md", GLOBAL_SCOPE, content));
         paragraph.setLength(0);
     }
 

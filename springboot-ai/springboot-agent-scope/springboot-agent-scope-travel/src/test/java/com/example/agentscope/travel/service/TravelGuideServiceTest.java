@@ -78,7 +78,7 @@ class TravelGuideServiceTest {
         doNothing().when(travelGuideService).scheduleMemoryRepair(any(RuntimeContext.class));
 
         Msg routeMessage = mock(Msg.class);
-        RouteDecision decision = new RouteDecision(AgentType.FOOD, "用户想了解成都美食。");
+        RouteDecision decision = new RouteDecision(AgentType.FOOD, "用户想了解旅行饮食。");
         when(routeMessage.hasStructuredData()).thenReturn(true);
         when(routeMessage.getStructuredData(RouteDecision.class)).thenReturn(decision);
         when(router.call(anyList(), eq(RouteDecision.class), any(RuntimeContext.class)))
@@ -90,17 +90,17 @@ class TravelGuideServiceTest {
     void chatWithKnowledge_injectsNumberedSourcesAndReturnsCitations() {
         List<KnowledgeSearchResult> sources = Arrays.asList(
                 new KnowledgeSearchResult(
-                        "chengdu-food-1", "成都美食指南 - 代表性美食",
-                        "chengdu-food.md", 12, "可以了解火锅、串串和小吃。"),
+                        "global-food-guidance-1", "通用旅行饮食指南 - 饮食节奏与预算",
+                        "global-food-guidance.md", 12, "保持规律三餐，按时吃饭，并注意食品卫生。"),
                 new KnowledgeSearchResult(
                         "travel-safety-1", "旅行安全 - 饮食卫生",
                         "travel-safety.md", 5, "注意饮食卫生，出现不适及时就医。"));
         KnowledgeSearchResponse knowledgeResponse = new KnowledgeSearchResponse("成都美食", 3, sources);
         when(knowledgeService.search(any(KnowledgeSearchRequest.class))).thenReturn(knowledgeResponse);
         when(foodAgent.call(anyString(), any(RuntimeContext.class)))
-                .thenReturn(Mono.just(message("成都美食可从火锅和小吃入手。[1]")));
+                .thenReturn(Mono.just(message("旅行期间应规律饮食并注意食品卫生。[1]")));
         when(guideAgent.call(anyString(), any(RuntimeContext.class)))
-                .thenReturn(Mono.just(message("成都美食可从火锅和小吃入手。[1] 同时注意饮食卫生。[2]")));
+                .thenReturn(Mono.just(message("旅行期间应规律饮食并注意食品卫生。[1] 同时注意饮食卫生。[2]")));
 
         TravelChatResponse response = travelGuideService.chat(request());
 
@@ -123,9 +123,9 @@ class TravelGuideServiceTest {
         verify(foodAgent).call(
                 specialistInputCaptor.capture(), specialistContextCaptor.capture());
         assertThat(specialistInputCaptor.getValue())
-                .contains("[1] 成都美食指南 - 代表性美食")
+                .contains("[1] 通用旅行饮食指南 - 饮食节奏与预算")
                 .contains("[2] 旅行安全 - 饮食卫生")
-                .contains("来源文件：chengdu-food.md")
+                .contains("来源文件：global-food-guidance.md")
                 .contains("采用某条知识时在对应句子后标注 [1]、[2] 等编号")
                 .contains("用户长期记忆（个人上下文，禁止添加知识引用；当前用户消息优先）");
 
@@ -162,10 +162,10 @@ class TravelGuideServiceTest {
 
         assertThat(response.getKnowledgeSources()).containsExactlyElementsOf(sources);
         assertThat(response.getAnswer())
-                .contains("成都美食可从火锅和小吃入手。[1]")
+                .contains("旅行期间应规律饮食并注意食品卫生。[1]")
                 .contains("注意饮食卫生。[2]")
                 .contains("### 知识来源")
-                .contains("- [1] `chengdu-food.md`")
+                .contains("- [1] `global-food-guidance.md`")
                 .contains("- [2] `travel-safety.md`");
         verify(travelGuideService).scheduleMemoryRepair(any(RuntimeContext.class));
     }
@@ -195,13 +195,13 @@ class TravelGuideServiceTest {
     @DisplayName("指南 Agent 返回空内容时仍使用专家回答并保留来源")
     void chatWhenGuideReturnsBlank_fallsBackToSpecialistAndKeepsSources() {
         KnowledgeSearchResult source = new KnowledgeSearchResult(
-                "chengdu-food-1", "成都美食指南 - 代表性美食",
-                "chengdu-food.md", 12, "可以了解火锅、串串和小吃。");
+                "global-food-guidance-1", "通用旅行饮食指南 - 饮食节奏与预算",
+                "global-food-guidance.md", 12, "保持规律三餐，按时吃饭，并注意食品卫生。");
         KnowledgeSearchResponse knowledgeResponse = new KnowledgeSearchResponse(
                 "成都美食", 3, Collections.singletonList(source));
         when(knowledgeService.search(any(KnowledgeSearchRequest.class))).thenReturn(knowledgeResponse);
         when(foodAgent.call(anyString(), any(RuntimeContext.class)))
-                .thenReturn(Mono.just(message("成都美食可从火锅入手。[1]")));
+                .thenReturn(Mono.just(message("旅行期间应规律饮食。[1]")));
         when(guideAgent.call(anyString(), any(RuntimeContext.class)))
                 .thenReturn(Mono.just(message(" ")));
 
@@ -209,9 +209,9 @@ class TravelGuideServiceTest {
 
         assertThat(response.getKnowledgeSources()).containsExactly(source);
         assertThat(response.getAnswer())
-                .startsWith("成都美食可从火锅入手。[1]")
+                .startsWith("旅行期间应规律饮食。[1]")
                 .contains("### 知识来源")
-                .contains("- [1] `chengdu-food.md`");
+                .contains("- [1] `global-food-guidance.md`");
     }
 
     private TravelChatRequest request() {

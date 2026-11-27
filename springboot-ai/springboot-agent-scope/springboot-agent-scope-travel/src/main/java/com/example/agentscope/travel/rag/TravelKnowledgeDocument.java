@@ -8,12 +8,14 @@ public class TravelKnowledgeDocument {
     private final String id;
     private final String title;
     private final String source;
+    private final String scope;
     private final String content;
 
-    public TravelKnowledgeDocument(String id, String title, String source, String content) {
+    public TravelKnowledgeDocument(String id, String title, String source, String scope, String content) {
         this.id = id;
         this.title = title;
         this.source = source;
+        this.scope = scope;
         this.content = content;
     }
 
@@ -27,6 +29,10 @@ public class TravelKnowledgeDocument {
 
     public String getSource() {
         return source;
+    }
+
+    public String getScope() {
+        return scope;
     }
 
     public String getContent() {

@@ -19,7 +19,7 @@ public class TravelAgentProperties {
     /**
      * 本地 OpenAI 兼容服务的访问密钥。
      */
-    @NotBlank(message = "请通过 OPENAI_API_KEY 配置本地模型密钥")
+    @NotBlank(message = "请配置 travel.agent.api-key")
     private String apiKey;
 
     /**

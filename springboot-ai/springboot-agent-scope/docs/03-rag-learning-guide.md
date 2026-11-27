@@ -2,7 +2,7 @@
 
 本文对应旅游多智能体项目已经完成的 RAG 链路：MySQL 保存知识正文，PostgreSQL + pgvector 保存向量，应用层完成 Embedding、候选检索、正文回查和来源引用。
 
-当前知识正文通过 **MySQL 8 + Spring Data JPA** 持久化，共 19 个片段；**PostgreSQL 17.9 + pgvector 0.8.2** 保存对应的 19 条向量，通过 `chunk_id` 关联。当前默认使用 `Qwen3-Embedding-0.6B@1024` 真实 Embedding；旧的 256 维特征哈希实现仅在 `demo-embedding` Profile 下保留。
+当前知识正文通过 **MySQL 8 + Spring Data JPA** 持久化，共 22 个 `GLOBAL` 通用片段；**PostgreSQL 17.9 + pgvector 0.8.2** 保存对应的 22 条向量，通过 `chunk_id` 关联。当前默认使用 `Qwen3-Embedding-0.6B@1024` 真实 Embedding；旧的 256 维特征哈希实现仅在 `demo-embedding` Profile 下保留。
 
 ## 1. 什么是 RAG
 
@@ -25,7 +25,7 @@ src/main/resources/knowledge/travel/*.md
       TravelKnowledgeService
                 │
                 ├── 分块并按稳定 ID 同步到 MySQL
-                │      travel_knowledge_chunk（19 个正文片段）
+                │      travel_knowledge_chunk（22 个 GLOBAL 正文片段）
                 │
                 ├── 读取“标题 + 正文”，计算 content_hash
                 ├── 按 chunk_id + content_hash + model_name 判断是否最新
@@ -37,7 +37,7 @@ src/main/resources/knowledge/travel/*.md
       TravelVectorRepository 幂等 upsert
                 │
                 ▼
-PostgreSQL travel_knowledge_embedding（19 条向量）
+PostgreSQL travel_knowledge_embedding（22 条向量）
 ```
 
 ### 查询链路
@@ -67,10 +67,10 @@ MySQL findAllById，按 chunk_id 批量取回正文
 
 | 存储 | 职责 | 访问方式 |
 | --- | --- | --- |
-| MySQL `travel_knowledge_chunk` | 保存标题、来源、正文和时间戳 | Spring Data JPA |
+| MySQL `travel_knowledge_chunk` | 保存标题、来源、`GLOBAL` 范围、正文和时间戳 | Spring Data JPA |
 | PostgreSQL `travel_knowledge_embedding` | 保存向量、`chunk_id`、模型标记、内容哈希和嵌入时间 | 独立 `JdbcTemplate` + pgvector |
 
-两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 39 个单元测试全部通过，真实库已验证 19 条唯一 1024 维 `Qwen3-Embedding-0.6B@1024` 向量、普通索引和 HNSW 索引，重复启动同步数量为 0。美食、预算和安全查询能返回预期知识，无关问题返回空结果；真实 Chat 模型的美食问答保留了 `[1]`、`[2]`、`[3]` 引用并返回三条 `knowledgeSources`。
+两库没有跨库外键，由应用层通过 `chunk_id` 关联；MySQL 正文缺失的候选会被跳过。当前 40 个单元测试全部通过，真实库已验证 22 条唯一 1024 维 `Qwen3-Embedding-0.6B@1024` 向量、普通索引和 HNSW 索引，重复启动同步数量为 0。美食、预算和安全查询能返回预期通用知识，成都和上海等城市问题不会返回已下线的成都测试来源，无关问题返回空结果。
 
 ## 3. 知识文件
 
@@ -80,14 +80,15 @@ MySQL findAllById，按 chunk_id 批量取回正文
 
 包含：
 
-- `chengdu-itinerary.md`：成都三天两夜行程。
-- `chengdu-food.md`：成都美食与饮食提醒。
-- `travel-budget.md`：旅行预算估算方法。
-- `travel-safety.md`：旅行安全与信息核实提醒。
+- `global-itinerary-principles.md`：通用行程目标、节奏、区域组织和备选方案。
+- `global-transport-accommodation.md`：通用城际交通、市内交通、住宿成本和入住核对。
+- `global-food-guidance.md`：通用饮食节奏、食品卫生、过敏原和肠胃健康。
+- `travel-budget.md`：通用预算结构、交通住宿、餐饮门票和弹性费用。
+- `travel-safety.md`：通用信息核实、天气、证件保险、财物通讯和健康提醒。
 
-这些是项目内置的静态学习资料，不是实时天气、票价或政策数据。
+这些是项目内置的静态通用知识，不包含城市专属事实，也不是实时天气、票价或政策数据。所有片段在 MySQL 中标记为 `GLOBAL`。
 
-Markdown 文件是初始化素材，不是运行时直接读取的数据源。应用启动时把片段同步到 MySQL，再从数据库加载。后续可以直接通过 JPA 管理知识正文；如果仍保留 Markdown 素材，启动同步会以文件内容更新同 ID 的记录。
+Markdown 文件是初始化素材，不是运行时直接读取的数据源。应用启动时把片段同步到 MySQL，再从数据库加载。后续可以直接通过 JPA 管理知识正文；如果仍保留 Markdown 素材，启动同步会以文件内容更新同 ID 的记录。启动同步只新增或更新片段，不会自动删除文件中已移除的数据库记录；退役知识必须先备份，再分别清理 MySQL 正文和 pgvector 向量。
 
 ## 4. 检索接口
 
@@ -100,7 +101,7 @@ Content-Type: application/json
 
 ```json
 {
-  "query": "成都三天两夜有什么美食推荐",
+  "query": "旅行期间如何安排饮食",
   "topK": 3
 }
 ```
@@ -116,16 +117,16 @@ Content-Type: application/json
 
 ```json
 {
-  "query": "成都三天两夜有什么美食推荐",
+  "query": "旅行期间如何安排饮食",
   "topK": 3,
   "totalMatches": 1,
   "results": [
     {
-      "id": "chengdu-food-1",
-      "title": "成都美食指南 - 美食类型",
-      "source": "chengdu-food.md",
+      "id": "global-food-guidance-1",
+      "title": "通用旅行饮食指南 - 饮食节奏与预算",
+      "source": "global-food-guidance.md",
       "score": 87,
-      "content": "美食类型\n成都美食以麻辣、鲜香和多样的小吃文化为代表。"
+      "content": "饮食节奏与预算\n保持规律三餐，按时吃饭，避免为了赶行程长时间空腹或暴饮暴食。"
     }
   ]
 }
@@ -150,7 +151,7 @@ Content-Type: application/json
 curl -X POST http://localhost:8080/api/travel/knowledge/search \
   -H 'Content-Type: application/json' \
   -d '{
-    "query": "成都三天两夜有什么美食推荐",
+    "query": "旅行期间如何安排饮食",
     "topK": 3
   }'
 ```
@@ -163,27 +164,27 @@ curl -X POST http://localhost:8080/api/travel/knowledge/search \
 2. 二级、三级标题作为片段标题。
 3. 空行结束当前段落。
 4. 每个非空段落生成一个知识片段。
-5. 片段 ID 由文件名和序号组成，例如 `chengdu-food-1`。
-6. 来源保存为 Markdown 文件名，便于回答时引用。
-7. 根据 ID 查询数据库；不存在时插入，标题、来源或正文变化时更新。
+5. 片段 ID 由文件名和序号组成，例如 `global-food-guidance-1`。
+6. 来源保存为 Markdown 文件名，范围保存为 `GLOBAL`，便于回答时引用和后续过滤。
+7. 根据 ID 查询数据库；不存在时插入，标题、来源、范围或正文变化时更新。
 8. 从数据库读取全部片段，对“标题 + 换行 + 正文”计算 SHA-256 `content_hash`。
 9. 按 `chunk_id + content_hash + model_name` 判断向量是否最新；缺失或变化时生成向量并幂等写入 pgvector。
 
-`TravelKnowledgeChunk` 对应 MySQL `travel_knowledge_chunk` 表，包含 `id`、`title`、`source`、`content`、`created_at` 和 `updated_at`。同步时保留已有记录的创建时间，只更新内容变化的记录及其更新时间。
+`TravelKnowledgeChunk` 对应 MySQL `travel_knowledge_chunk` 表，包含 `id`、`title`、`source`、`scope`、`content`、`created_at` 和 `updated_at`。当前 `scope` 均为 `GLOBAL`，数据库列默认值也是 `GLOBAL`，便于已有通用记录平滑补充范围。同步时保留已有记录的创建时间，只更新内容变化的记录及其更新时间。
 
 PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model_name`、`content_hash` 和 `embedded_at`。当前模型标记为 `Qwen3-Embedding-0.6B@1024`，向量列为 `VECTOR(1024)`；`chunk_id` 是主键，`ON CONFLICT (chunk_id)` 保证重复启动和重复同步不会产生重复向量记录。旧的 256 维 `demo-feature-hash-v3` 数据保留在 `travel_knowledge_embedding_demo256_backup_20261127` 备份表中。
 
 示例：
 
 ```markdown
-# 成都美食指南
+# 通用旅行饮食指南
 
-## 美食类型
+## 饮食节奏
 
-成都美食以麻辣、鲜香为代表。
+保持规律三餐，按时吃饭，避免长时间空腹或暴饮暴食。
 ```
 
-会生成一个标题为“成都美食指南 - 美食类型”的知识片段。
+会生成一个标题为“通用旅行饮食指南 - 饮食节奏”的 `GLOBAL` 知识片段。
 
 ## 6. 真实 Embedding、相似度与阈值
 
@@ -218,71 +219,40 @@ PostgreSQL `travel_knowledge_embedding` 保存 `chunk_id`、`embedding`、`model
 5. 同一来源最多保留 2 个片段，最后截取 Top-K；距离相同时按 `chunk_id` 升序。
 6. `score` 先将相似度限制在 0–1，再计算 `round(similarity × 100)`，是 0–100 的相似度百分比，不是概率。
 
-当前真实模型的候选上限为 20、最低相似度为 0.45。该阈值来自本地真实召回样本：
+当前真实模型的候选上限为 20、最低相似度为 0.45。2026-11-27 使用通用正式语料完成以下验证：
 
 | 查询 | 观察结果 |
 | --- | --- |
-| 成都春熙路附近有什么小吃 | 命中美食知识，分数 54、52 |
-| 成都两个人三天两夜的总花费怎么估算 | 命中预算知识，其中预算片段分数 49、48 |
-| 去高原旅行出现高原反应应该怎么办 | 命中安全知识，分数 65、49 |
-| 如何治疗感冒、红烧肉怎么做、明天深圳的股票会涨吗 | 均返回空结果 |
+| 成都三天两夜有什么美食推荐 | 返回饮食常识和安全通用知识，不返回成都专属来源 |
+| 上海三天两夜行程 | 返回交通住宿和行程原则通用知识 |
+| 三个人旅行五天怎么安排预算 | 返回预算和行程原则通用知识 |
+| 旅行期间如何安排饮食 | 返回饮食常识和安全通用知识 |
+| 量子纠缠实验 | 返回空结果 |
 
-有效旅游查询主要集中在约 48–72 分，完全无关查询最高约 30 分，因此选择 0.45 保留有效召回并过滤明显无关结果。阈值不是跨模型通用常量：更换 Embedding 模型、维度或知识库后都要重新采样校准。演示哈希向量的分数尺度不同，在独立演示数据库中启用时应显式设置 `--travel.rag.vector.min-similarity=0.15`。
+当前知识库只有 `GLOBAL` 通用知识，因此城市问题命中的是行程、交通、住宿、饮食、预算和安全方法，不代表已经具备该城市的本地知识。阈值不是跨模型通用常量：更换 Embedding 模型、维度或知识库后都要重新采样校准。演示哈希向量的分数尺度不同，在独立演示数据库中启用时应显式设置 `--travel.rag.vector.min-similarity=0.15`。
 
 ## 7. 配置项
 
-部署时建议通过环境变量提供连接信息，下面全部使用占位符：
-
-```yaml
-travel:
-  agent:
-    api-key: ${OPENAI_API_KEY}
-  rag:
-    knowledge-pattern: classpath*:knowledge/travel/*.md
-    top-k: 3
-    embedding:
-      base-url: ${EMBEDDING_BASE_URL:http://127.0.0.1:8000/v1}
-      api-key: ${EMBEDDING_API_KEY:}
-      model-name: ${EMBEDDING_MODEL_NAME:Qwen3-Embedding-0.6B}
-      dimension: ${EMBEDDING_DIMENSION:1024}
-      timeout-seconds: 60
-      query-instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query"
-    vector:
-      url: ${PG_URL}
-      username: ${PG_USER}
-      password: ${PG_PASSWORD}
-      min-similarity: 0.45
-      candidate-limit: 20
-
-spring:
-  datasource:
-    url: jdbc:mysql://<mysql-host>:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER}
-    password: ${MYSQL_PASSWORD}
-  jpa:
-    hibernate:
-      ddl-auto: update
-```
-
-`application.yml` 提供了本地示例默认地址；生产或本地联调时应按实际环境覆盖。Chat 使用 `OPENAI_API_KEY`，Embedding 使用 `EMBEDDING_API_KEY`；本机 omlx 两个接口都要求认证。启动环境变量示例见 [README](../README.md#6-启动)。
+当前配置直接写在 `springboot-agent-scope-travel/src/main/resources/application.yml`，不使用 `${ENV:default}` 占位符。本文不复制真实账号、密码和密钥，只说明可调整的非敏感参数。该配置文件包含本机实际凭据，提交到共享仓库前必须先脱敏。
 
 | 配置 | 说明 |
 | --- | --- |
 | `travel.rag.knowledge-pattern` | 启动同步所需的 Spring Resource 匹配规则 |
 | `travel.rag.top-k` | 默认返回片段数量，范围 1 到 10 |
-| `travel.rag.embedding.base-url` | Embedding 服务地址，通过 `EMBEDDING_BASE_URL` 覆盖 |
-| `travel.rag.embedding.api-key` | Embedding 服务密钥，通过 `EMBEDDING_API_KEY` 注入；服务不要求认证时可为空 |
-| `travel.rag.embedding.model-name` | Embedding 模型名称，通过 `EMBEDDING_MODEL_NAME` 覆盖 |
-| `travel.rag.embedding.dimension` | 向量维度，默认 1024，通过 `EMBEDDING_DIMENSION` 覆盖 |
+| `travel.rag.embedding.base-url` | Embedding 服务地址，当前指向本地 OpenAI 兼容服务 |
+| `travel.rag.embedding.api-key` | Embedding 服务密钥，按本机服务要求直接配置，不在文档中展示 |
+| `travel.rag.embedding.model-name` | 当前模型为 `Qwen3-Embedding-0.6B` |
+| `travel.rag.embedding.dimension` | 当前维度为 1024 |
 | `travel.rag.embedding.timeout-seconds` | Embedding HTTP 连接和读取超时 |
-| `travel.rag.vector.url` | PostgreSQL JDBC 地址，通过 `PG_URL` 覆盖 |
-| `travel.rag.vector.username` | PostgreSQL 用户名，通过 `PG_USER` 覆盖 |
-| `travel.rag.vector.password` | PostgreSQL 密码，`PG_PASSWORD` 启动必填 |
+| `travel.rag.embedding.query-instruction` | Qwen3 查询向量使用的检索指令 |
+| `travel.rag.vector.url` | PostgreSQL JDBC 地址，直接配置实际值 |
+| `travel.rag.vector.username` | PostgreSQL 用户名，直接配置实际值 |
+| `travel.rag.vector.password` | PostgreSQL 密码，直接配置实际值，不在文档中展示 |
 | `travel.rag.vector.min-similarity` | 最低余弦相似度，真实模型默认 `0.45`，演示模型显式使用 `0.15` |
 | `travel.rag.vector.candidate-limit` | pgvector 候选上限，当前为 `20` |
-| `MYSQL_DATABASE` | 业务库名称 |
-| `MYSQL_USER` | MySQL 用户名 |
-| `MYSQL_PASSWORD` | 启动时必须提供的 MySQL 密码环境变量 |
+| `spring.datasource.url` | MySQL 业务库 JDBC 地址，直接配置实际值 |
+| `spring.datasource.username` | MySQL 用户名，直接配置实际值 |
+| `spring.datasource.password` | MySQL 密码，直接配置实际值，不在文档中展示 |
 | `spring.jpa.hibernate.ddl-auto` | 当前为 `update`，只建议本地学习环境使用 |
 
 调整建议：
@@ -326,12 +296,17 @@ SELECT COUNT(*) AS chunk_count,
        COUNT(DISTINCT id) AS unique_chunks
 FROM travel_knowledge_chunk;
 
-SELECT id, title, source, CHAR_LENGTH(content) AS content_length
+SELECT scope, COUNT(*) AS chunk_count
+FROM travel_knowledge_chunk
+GROUP BY scope
+ORDER BY scope;
+
+SELECT id, title, source, scope, CHAR_LENGTH(content) AS content_length
 FROM travel_knowledge_chunk
 ORDER BY id;
 ```
 
-当前基线应为 19 个片段、19 个唯一 ID。记下按 ID 排序的列表，用于和 pgvector 的 `chunk_id` 对比。
+当前基线应为 22 个片段、22 个唯一 ID，且 `scope` 全部为 `GLOBAL`。记下按 ID 排序的列表，用于和 pgvector 的 `chunk_id` 对比。
 
 ### PostgreSQL 核对
 
@@ -375,7 +350,7 @@ FROM travel_knowledge_embedding_demo256_backup_20261127
 GROUP BY model_name;
 ```
 
-当前正式表基线应为 19 条唯一 `chunk_id`，最小和最大维度均为 1024，错误维度数量为 0，模型标记为 `Qwen3-Embedding-0.6B@1024`。`chunk_id` 排序结果应与 MySQL 的 `id` 列表一致。备份表应保留 19 条、256 维、`demo-feature-hash-v3` 数据。正式表索引结果应包含：
+当前正式表基线应为 22 条唯一 `chunk_id`，最小和最大维度均为 1024，错误维度数量为 0，模型标记为 `Qwen3-Embedding-0.6B@1024`。`chunk_id` 排序结果应与 MySQL 的 `id` 列表一致。备份表应保留 19 条、256 维、`demo-feature-hash-v3` 数据。正式表索引结果应包含：
 
 - `travel_knowledge_embedding_pkey`：`chunk_id` 主键。
 - `idx_travel_knowledge_embedding_model`：`model_name` 普通索引。
@@ -387,7 +362,7 @@ GROUP BY model_name;
 WITH query_vector AS (
     SELECT embedding
     FROM travel_knowledge_embedding
-    WHERE chunk_id = 'chengdu-food-1'
+    WHERE chunk_id = 'global-food-guidance-1'
       AND model_name = 'Qwen3-Embedding-0.6B@1024'
 )
 SELECT e.chunk_id,
@@ -399,7 +374,7 @@ ORDER BY e.embedding <=> q.embedding, e.chunk_id
 LIMIT 20;
 ```
 
-`chengdu-food-1` 与自身比较时相似度应为 1。这条 SQL 只用于核对数据库距离运算，实际 HTTP 检索仍会先通过 `embedQuery` 生成查询向量。
+`global-food-guidance-1` 与自身比较时相似度应为 1。这条 SQL 只用于核对数据库距离运算，实际 HTTP 检索仍会先通过 `embedQuery` 生成查询向量。
 
 ## 10. 如何调试
 
@@ -411,7 +386,7 @@ LIMIT 20;
 - 检查 `min-similarity` 和 `candidate-limit`，必要时调整后重新调用独立检索接口。
 - 查看启动日志中的 MySQL 片段数量和向量同步数量。
 - 如果问题是语义相近但用词不同的表达仍无法命中，检查 Embedding 服务认证、模型名称、维度和 Qwen3 查询指令。
-- 本机 omlx 缺少 `EMBEDDING_API_KEY` 时会导致启动同步失败，应先修正环境变量，不要通过降低阈值绕过。
+- 本机 omlx 缺少 `travel.rag.embedding.api-key` 时会导致启动同步失败，应先修正 YAML 配置，不要通过降低阈值绕过。
 
 ### 命中了错误知识
 
@@ -463,15 +438,15 @@ LIMIT 20;
 服务按检索结果顺序生成材料，例如：
 
 ```text
-[1] 成都美食指南 - 代表性美食
-来源文件：chengdu-food.md
-片段编号：chengdu-food-1
-可以了解火锅、串串和小吃。
+[1] 通用旅行饮食指南 - 饮食节奏与预算
+来源文件：global-food-guidance.md
+片段编号：global-food-guidance-1
+保持规律三餐，按时吃饭，避免为了赶行程长时间空腹或暴饮暴食。
 
-[2] 旅行安全 - 饮食卫生
+[2] 旅行安全与出行提醒 - 健康与饮食
 来源文件：travel-safety.md
-片段编号：travel-safety-1
-注意饮食卫生，出现不适及时就医。
+片段编号：travel-safety-5
+准备常用药品并注意保质期，异地饮食应适量，持续或严重症状应及时就医。
 ```
 
 专家 Agent 收到要求：优先依据知识回答，并在相关事实后保留 `[1]`、`[2]` 编号；没有命中时明确说明，不能把模型常识说成知识库内容。指南 Agent 同时收到专家材料和检索知识，并被要求保留这些编号。
@@ -488,18 +463,18 @@ RAG 材料来自项目公共旅游知识库，使用 `[1]`、`[2]` 等编号标�
 
 ```json
 {
-  "sessionId": "chengdu-001",
+  "sessionId": "demo-001",
   "routedAgent": "FOOD",
-  "routeReason": "用户想了解成都三天两夜的美食推荐。",
-  "answer": "成都美食可以了解火锅和小吃。[1]\n\n### 知识来源\n- [1] `chengdu-food.md` — 成都美食指南 - 代表性美食（片段 ID：`chengdu-food-1`）",
+  "routeReason": "用户想了解旅行期间的饮食安排。",
+  "answer": "旅行期间应规律三餐、按时吃饭，并注意食品卫生。[1]\n\n### 知识来源\n- [1] `global-food-guidance.md` — 通用旅行饮食指南 - 饮食节奏与预算（片段 ID：`global-food-guidance-1`）",
   "notice": "本指南由本地模型生成，未实时查询交通、票价、天气或营业信息，出行前请通过官方渠道核实。",
   "knowledgeSources": [
     {
-      "id": "chengdu-food-1",
-      "title": "成都美食指南 - 代表性美食",
-      "source": "chengdu-food.md",
+      "id": "global-food-guidance-1",
+      "title": "通用旅行饮食指南 - 饮食节奏与预算",
+      "source": "global-food-guidance.md",
       "score": 87,
-      "content": "可以了解火锅、串串和小吃。"
+      "content": "保持规律三餐，按时吃饭，避免为了赶行程长时间空腹或暴饮暴食。"
     }
   ]
 }
@@ -513,18 +488,20 @@ RAG 材料来自项目公共旅游知识库，使用 `[1]`、`[2]` 等编号标�
 
 | 表 | 当前用途 | 已验证结果 |
 | --- | --- | --- |
-| `travel_knowledge_embedding` | 正式 Qwen3 向量表 | 19 条唯一片段，1024 维，模型标记 `Qwen3-Embedding-0.6B@1024` |
+| `travel_knowledge_embedding` | 正式 Qwen3 向量表 | 22 条唯一片段，1024 维，模型标记 `Qwen3-Embedding-0.6B@1024` |
 | `travel_knowledge_embedding_demo256_backup_20261127` | 旧演示向量备份 | 19 条片段，256 维，模型标记 `demo-feature-hash-v3` |
+| `travel_knowledge_chunk_chengdu_backup_20261127_180939` | 成都测试正文备份 | 9 条退役测试片段 |
+| `travel_knowledge_embedding_chengdu_backup_20261127_180939` | 成都测试向量备份 | 9 条与正文 ID 对应的旧向量 |
 
-迁移没有修改 MySQL `travel_knowledge_chunk`。应用第二次启动日志为 `Synchronized 0`，证明正文哈希和模型标记共同构成的幂等判断生效。正式表的普通索引、HNSW `vector_cosine_ops` 索引和主键均已核对。
+256→1024 向量迁移本身不修改 MySQL；2026-11-27 的知识库重整另行备份并删除了 9 条成都测试正文及对应向量。当前 MySQL 和正式向量表均为 22 条 `GLOBAL` 通用知识，应用重复启动同步数量为 0。正式表的普通索引、HNSW `vector_cosine_ops` 索引和主键均已核对。
 
 以后切换 Embedding 模型或维度时：
 
-1. 通过环境变量配置新的 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL_NAME`、`EMBEDDING_DIMENSION` 和可选 `EMBEDDING_API_KEY`。
+1. 在 `application.yml` 中直接配置新的 Embedding 服务地址、模型名称、维度和可选密钥，不使用 `${ENV:default}` 占位符。
 2. 确认 `TravelEmbeddingService` 只有一个 Profile 对应的实现，并让 `getModelName()` 区分模型版本和维度。
 3. 保持 `embedDocument` 与 `embedQuery` 使用同一模型、版本和维度；不要在两处分别调用不同实现。
 4. 停止应用，确认目标 PostgreSQL 数据库，重命名旧表、主键约束和索引，保留可回滚数据。
-5. 重启应用自动创建新表并重建向量，再核对 19 条片段、维度、模型标记、索引、`Synchronized 0` 和检索样本。
+5. 重启应用自动创建新表并重建向量，再核对全部片段数量、维度、模型标记、索引、`Synchronized 0` 和检索样本。
 
 `CREATE TABLE IF NOT EXISTS` 不会把已有 `VECTOR(256)` 改成 `VECTOR(1024)`。应用不会自动 `DROP TABLE` 或 `TRUNCATE TABLE`；维度不一致时会明确终止启动。完整的迁移 SQL、备份核对和可逆回滚步骤见 [开发与扩展指南](02-development-guide.md#切换-embedding-模型与迁移向量表)。
 
