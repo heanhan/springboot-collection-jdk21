@@ -73,7 +73,10 @@
         <minio.version>8.5.2</minio.version>
 
         <!-- 工作流 -->
-        <activiti.version>7.1.0.M4</activiti.version>
+        <activiti.version>7.1.0.M6</activiti.version>
+
+        <!-- 认证 -->
+        <jjwt.version>0.12.5</jjwt.version>
 
         <!-- Servlet（WAR 外置部署） -->
         <javax-servlet.version>4.0.1</javax-servlet.version>
@@ -201,6 +204,25 @@
                 <type>pom</type>
             </dependency>
 
+            <!-- 认证 -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+
             <!-- Servlet -->
             <dependency>
                 <groupId>javax.servlet</groupId>
@@ -276,6 +298,13 @@
                     <target>${maven.compiler.target}</target>
                     <parameters>true</parameters>
                     <encoding>${project.build.sourceEncoding}</encoding>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.46</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作台 · Active7 请假审批实验室</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<div id="workspace" class="workshell" data-base="/active">
+    <header class="topbar">
+        <a class="brand" href="/active/index">
+            <span class="brand-mark">A7</span>
+            <span>Active7 <strong>请假审批实验室</strong></span>
+        </a>
+        <div class="topbar-right">
+            <span class="environment"><i></i> MySQL 演示环境</span>
+            <div class="user-chip">
+                <span id="userAvatar" class="avatar avatar-blue">用户</span>
+                <span><strong id="userName">加载中</strong><small id="userDepartment"></small></span>
+            </div>
+            <button id="logoutButton" class="button button-ghost button-small" type="button">退出</button>
+        </div>
+    </header>
+
+    <div class="app-layout">
+        <aside class="sidebar">
+            <nav class="side-nav" aria-label="工作台导航">
+                <span class="nav-label">工作空间</span>
+                <button class="nav-item active" data-view="overview"><span class="nav-icon">01</span>流程总览</button>
+                <button id="requestNav" class="nav-item" data-view="requests"><span class="nav-icon">02</span>我的申请<span id="requestCount" class="nav-count">0</span></button>
+                <button class="nav-item" data-view="tasks" data-permission="leave:task:view"><span class="nav-icon">03</span>我的待办<span id="taskCount" class="nav-count hot">0</span></button>
+                <button class="nav-item" data-view="learn"><span class="nav-icon">04</span>流程学习</button>
+                <button id="adminNav" class="nav-item admin-only" data-view="admin" data-permission="process:view" hidden><span class="nav-icon">05</span>流程管理</button>
+                <button id="rbacNav" class="nav-item admin-only" data-view="rbac" data-permission="rbac:view" hidden><span class="nav-icon">06</span>权限管理</button>
+            </nav>
+            <div class="sidebar-guide">
+                <span class="eyebrow">推荐演练</span>
+                <h3>先走通短假</h3>
+                <p>张三提交 1 天年假，王五同意，张三确认。然后切换账号观察任务。</p>
+                <button class="text-button" data-view="learn">查看完整剧本 <span>→</span></button>
+            </div>
+            <div class="sidebar-foot">Activiti 7.1.0.M4<br>Java 8 风格源码</div>
+        </aside>
+
+        <main class="main-content">
+            <div id="globalAlert" class="alert" hidden></div>
+
+            <section id="view-overview" class="view active">
+                <div class="page-heading">
+                    <div><span class="eyebrow">LEAVE APPROVAL WORKFLOW</span><h1>流程总览</h1><p>流程引擎管理“走到哪一步”，业务表管理“这次请假是什么”。</p></div>
+                    <button class="button button-primary" data-action="new-request" data-permission="leave:create">＋ 新建请假</button>
+                </div>
+
+                <div class="stats-grid">
+                    <article class="stat-card stat-primary"><span>我的年假余额</span><div><strong id="balanceDays">--</strong><small>天</small></div><p id="balanceDetail">读取中</p></article>
+                    <article class="stat-card"><span>当前待办</span><div><strong id="pendingTasks">--</strong><small>个任务</small></div><p>只显示分配给我或候选账号是我的任务</p></article>
+                    <article class="stat-card"><span>我的申请</span><div><strong id="myRequests">--</strong><small>条记录</small></div><p>包含审批中、已结束和已撤回</p></article>
+                    <article class="stat-card stat-dark"><span>当前登录角色</span><div><strong id="roleName" class="stat-role">--</strong></div><p id="roleDescription">正在读取账号权限</p></article>
+                </div>
+
+                <article class="card flow-card">
+                    <div class="card-heading"><div><span class="eyebrow">BPMN 2.0</span><h2>公司员工请假审批流程</h2></div><span class="badge badge-purple">5 个用户任务 · 4 个网关</span></div>
+                    <div class="flow-map">
+                        <div class="flow-step"><span class="step-number">1</span><div><small>员工</small><strong>提交申请</strong><p>写入业务表与流程变量</p></div></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-step"><span class="step-number">2</span><div><small>wangwu</small><strong>经理审批</strong><p>同意 / 拒绝 / 退回</p></div></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-step"><span class="step-number">3</span><div><small>zhaoliu</small><strong>HR 审批</strong><p>&gt; 3 天或特殊假期</p></div></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-step"><span class="step-number">4</span><div><small>sunqi</small><strong>总监审批</strong><p>≥ 5 天进入</p></div></div>
+                        <span class="flow-arrow">→</span>
+                        <div class="flow-step"><span class="step-number">5</span><div><small>申请人</small><strong>确认安排</strong><p>结束后扣减年假</p></div></div>
+                    </div>
+                    <div class="branch-strip"><span><i class="dot dot-green"></i>短假可跳过 HR / 总监</span><span><i class="dot dot-orange"></i>病假、婚假、丧假必过 HR</span><span><i class="dot dot-red"></i>任一审批拒绝即结束</span></div>
+                </article>
+
+                <div class="two-columns">
+                    <article class="card">
+                        <div class="card-heading"><div><span class="eyebrow">QUICK START</span><h2>最近申请</h2></div><button class="text-button" data-view="requests">查看全部 →</button></div>
+                        <div id="recentRequests" class="recent-list"><div class="empty-state">正在加载申请记录…</div></div>
+                    </article>
+                    <article class="card role-card">
+                        <div class="card-heading"><div><span class="eyebrow">ACCOUNT ISOLATION</span><h2>这个账号能做什么？</h2></div></div>
+                        <div id="roleMatrix" class="role-matrix"></div>
+                        <div class="note-box"><strong>两层权限，缺一不可</strong><p>Spring Security 控制页面与接口；Active7 的 candidateUsers / assignee 控制具体任务。</p></div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="view-requests" class="view" hidden>
+                <div class="page-heading"><div><span class="eyebrow">MY REQUESTS</span><h1 id="requestViewTitle">我的申请</h1><p>查看申请状态、审批轨迹，并在允许时撤回。</p></div><button class="button button-primary" data-action="new-request" data-permission="leave:create">＋ 新建请假</button></div>
+                <article class="card"><div id="requestTable" class="table-wrap"><div class="empty-state">正在加载…</div></div></article>
+            </section>
+
+            <section id="view-tasks" class="view" hidden>
+                <div class="page-heading"><div><span class="eyebrow">MY TASKS</span><h1>我的待办</h1><p>候选任务需要先签收；签收后其他账号不能代替办理。</p></div><button class="button button-secondary" data-action="refresh-tasks">刷新任务</button></div>
+                <div class="task-tip"><strong>任务隔离核心查询</strong><code>taskCandidateOrAssigned(当前登录用户名)</code><span>不是查询全部任务后再隐藏按钮。</span></div>
+                <div id="taskList" class="task-grid"><div class="empty-state">正在加载…</div></div>
+            </section>
+
+            <section id="view-learn" class="view" hidden>
+                <div class="page-heading"><div><span class="eyebrow">LEARNING GUIDE</span><h1>流程学习</h1><p>先观察页面，再对照 BPMN、Java 代码和 Active7 数据表。</p></div><span class="badge badge-green">适合 JDK 8 开发者</span></div>
+                <div class="learn-grid">
+                    <article class="card learn-card"><span class="learn-index">01</span><h3>先理解三种 Service</h3><table class="simple-table"><tbody><tr><td>RepositoryService</td><td>部署流程、查询定义</td></tr><tr><td>RuntimeService</td><td>启动实例、读写流程变量</td></tr><tr><td>TaskService</td><td>查询、签收、完成任务</td></tr></tbody></table></article>
+                    <article class="card learn-card"><span class="learn-index">02</span><h3>再看任务分配</h3><p><code>candidateUsers="wangwu"</code> 让王五看到经理任务；<code>assignee="${applicant}"</code> 让补充和确认任务只属于申请人。</p><p>账号登录由 Spring Security 管理，用户名同时作为 Active7 的用户标识。</p></article>
+                    <article class="card learn-card"><span class="learn-index">03</span><h3>条件路由靠变量</h3><p>Java 设置 <code>needHr</code>、<code>needDirector</code> 等 Boolean 变量，BPMN 网关用表达式选择 sequenceFlow。</p><p>修改重填后天数后，Java 会重新计算分支。</p></article>
+                </div>
+                <article class="card">
+                    <div class="card-heading"><div><span class="eyebrow">DATA MODEL</span><h2>业务表与引擎表各司其职</h2></div></div>
+                    <div class="table-wrap"><table class="data-table"><thead><tr><th>表 / 对象</th><th>由谁维护</th><th>学习重点</th></tr></thead><tbody>
+                        <tr><td><code>leave_request</code></td><td>业务代码</td><td>申请人、请假内容、当前业务状态</td></tr>
+                        <tr><td><code>leave_record</code></td><td>业务代码</td><td>中文审批轨迹，适合直接查询</td></tr>
+                        <tr><td><code>leave_balance</code></td><td>业务代码</td><td>年假余额，最终同意时扣减</td></tr>
+                        <tr><td><code>sys_user_role</code></td><td>RBAC 关系</td><td>通过 user_id / role_code 联表查询角色</td></tr>
+                        <tr><td><code>sys_role_permission</code></td><td>RBAC 关系</td><td>通过 role_code / permission_code 联表查询权限</td></tr>
+                        <tr><td><code>sys_refresh_token</code></td><td>双 Token</td><td>只保存 Refresh Token 的 SHA-256 哈希</td></tr>
+                        <tr><td><code>ACT_RE_PROCDEF</code></td><td>Active7</td><td>流程定义与版本</td></tr>
+                        <tr><td><code>ACT_RU_TASK</code></td><td>Active7</td><td>当前未完成任务、候选人、签收人</td></tr>
+                        <tr><td><code>ACT_HI_TASKINST</code></td><td>Active7</td><td>历史任务，full history 保留完整轨迹</td></tr>
+                    </tbody></table></div>
+                </article>
+                <article class="card practice-card">
+                    <div class="card-heading"><div><span class="eyebrow">PRACTICE</span><h2>五组新手练习</h2></div></div>
+                    <ol class="practice-list">
+                        <li><strong>短假跳过分支：</strong>张三提交 1 天年假，确认 HR 与总监没有任务，员工确认后余额变为 9 天。</li>
+                        <li><strong>长假全链路：</strong>提交 5 天年假，依次用王五、赵六、孙七、张三办理。</li>
+                        <li><strong>退回重填：</strong>经理退回，张三改成 2 天事假，重新提交后观察变量和节点变化。</li>
+                        <li><strong>验证权限：</strong>在李四账号尝试查看王五的任务 ID，应得到 403。</li>
+                        <li><strong>观察数据库：</strong>使用 MySQL 客户端连接 <code>springboot_active7</code> 数据库，比较任务办理前后的 <code>ACT_RU_TASK</code> 和 <code>ACT_HI_TASKINST</code>。</li>
+                    </ol>
+                </article>
+            </section>
+
+            <section id="view-admin" class="view admin-only" hidden>
+                <div class="page-heading"><div><span class="eyebrow">PROCESS ADMIN</span><h1>流程管理</h1><p>按 process:view 与 process:deploy 权限访问部署、定义和流程 XML。</p></div><span class="badge badge-orange">流程权限</span></div>
+                <div class="two-columns">
+                    <article class="card"><div class="card-heading"><h2>流程定义</h2><button class="text-button" data-action="refresh-admin">刷新</button></div><div id="definitionList"></div></article>
+                    <article class="card"><div class="card-heading"><h2>部署记录</h2></div><div id="deploymentList"></div></article>
+                </div>
+                <article class="card" id="deployCard" data-permission="process:deploy">
+                    <div class="card-heading"><div><span class="eyebrow">DYNAMIC DEPLOYMENT</span><h2>上传 BPMN ZIP</h2></div></div>
+                    <form id="deployForm" class="deploy-form"><label>选择 ZIP 文件<input id="deployFile" type="file" accept=".zip,.bar" required></label><button class="button button-primary" type="submit">部署流程</button></form>
+                    <p class="muted">ZIP 中应直接包含 .bpmn20.xml 或 .bar 文件。生产部署还应加入文件大小、路径和病毒扫描。</p>
+                </article>
+                <article class="card"><div class="card-heading"><h2>当前运行时任务</h2><span class="badge">管理员可看全部</span></div><div id="allTaskList"></div></article>
+            </section>
+
+            <section id="view-rbac" class="view admin-only" hidden>
+                <div class="page-heading"><div><span class="eyebrow">ROLE BASED ACCESS CONTROL</span><h1>权限管理</h1><p>为用户分配角色、为角色配置权限；下一次请求即按最新关系重新计算。</p></div><button class="button button-secondary" data-action="refresh-rbac">刷新关系</button></div>
+                <div class="rbac-model"><span>用户</span><i>多对多</i><span>角色</span><i>多对多</i><span>权限</span><small>关联字段 + XML JOIN，不使用实体关联注解</small></div>
+                <div class="two-columns">
+                    <article class="card"><div class="card-heading"><h2>用户与角色</h2><span class="badge">user_role</span></div><div id="rbacUserList"></div></article>
+                    <article class="card"><div class="card-heading"><h2>角色与权限</h2><span class="badge">role_permission</span></div><div id="rbacRoleList"></div></article>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<div id="modal" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <header class="modal-header"><div><span class="eyebrow">ACTIVE7 WORKSPACE</span><h2 id="modalTitle"></h2></div><button id="modalClose" class="icon-button" type="button" aria-label="关闭">×</button></header>
+        <div id="modalBody"></div>
+    </section>
+</div>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

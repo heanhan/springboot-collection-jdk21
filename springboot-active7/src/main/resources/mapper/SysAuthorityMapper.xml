@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.active7.mapper.SysAuthorityMapper">
+
+    <select id="selectRoleCodes" resultType="string">
+        SELECT r.role_code
+        FROM sys_user_role ur
+        JOIN sys_role r ON r.role_code = ur.role_code
+        WHERE ur.user_id = #{userId}
+        ORDER BY r.role_code
+    </select>
+
+    <select id="selectPermissionCodes" resultType="string">
+        SELECT DISTINCT p.permission_code
+        FROM sys_user_role ur
+        JOIN sys_role_permission rp ON rp.role_code = ur.role_code
+        JOIN sys_permission p ON p.permission_code = rp.permission_code
+        WHERE ur.user_id = #{userId}
+        ORDER BY p.permission_code
+    </select>
+
+    <select id="selectUserRoleRows" resultType="com.example.active7.service.rbac.SysAuthorityRow">
+        SELECT u.user_id AS userId,
+               u.username AS username,
+               u.display_name AS displayName,
+               u.department AS department,
+               r.role_code AS roleCode,
+               r.role_name AS roleName
+        FROM sys_user u
+        LEFT JOIN sys_user_role ur ON ur.user_id = u.user_id
+        LEFT JOIN sys_role r ON r.role_code = ur.role_code
+        ORDER BY u.user_id, r.role_code
+    </select>
+
+    <select id="selectRolePermissionRows" resultType="com.example.active7.service.rbac.SysAuthorityRow">
+        SELECT r.role_code AS roleCode,
+               r.role_name AS roleName,
+               r.description AS roleDescription,
+               p.permission_code AS permissionCode,
+               p.permission_name AS permissionName
+        FROM sys_role r
+        LEFT JOIN sys_role_permission rp ON rp.role_code = r.role_code
+        LEFT JOIN sys_permission p ON p.permission_code = rp.permission_code
+        ORDER BY r.role_code, p.permission_code
+    </select>
+
+    <select id="countAdminUsers" resultType="int">
+        SELECT COUNT(DISTINCT ur.user_id)
+        FROM sys_user_role ur
+        JOIN sys_role r ON r.role_code = ur.role_code
+        WHERE r.role_code = 'ADMIN'
+    </select>
+</mapper>

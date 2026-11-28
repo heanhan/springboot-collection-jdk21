@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 · Active7 请假审批实验室</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="login-page">
+<main class="login-shell">
+    <section class="login-story">
+        <a class="brand brand-light" href="/active/login">
+            <span class="brand-mark">A7</span>
+            <span>Active7 <strong>请假审批实验室</strong></span>
+        </a>
+        <div class="login-story-content">
+            <span class="eyebrow light">BPMN × Spring Security</span>
+            <h1>把一次请假，<br>拆成看得见的流程。</h1>
+            <p>从员工提交到总监审批，再到员工确认。用不同账号登录，亲手走完每条审批分支。</p>
+            <div class="login-flow" aria-label="流程预览">
+                <span>员工提交</span><i>→</i><span>经理审批</span><i>→</i><span>HR / 总监</span><i>→</i><span>员工确认</span>
+            </div>
+        </div>
+        <div class="login-story-foot">JDK 8 风格 Java · Spring Boot 3 · Activiti 7.1.0.M4</div>
+    </section>
+
+    <section class="login-panel">
+        <div class="login-box">
+            <span class="eyebrow">欢迎回来</span>
+            <h2>登录演示账号</h2>
+            <p class="muted">切换账号，观察任务如何流转。</p>
+
+            <div th:if="${param.expired}" class="alert alert-error" role="alert">登录已过期，请重新登录。</div>
+            <div id="loginAlert" class="alert alert-error" role="alert" hidden></div>
+
+            <form id="loginForm" class="form-stack">
+                <label>
+                    <span>账号</span>
+                    <input id="username" name="username" type="text" autocomplete="username" placeholder="例如 zhangsan" required autofocus>
+                </label>
+                <label>
+                    <span>密码</span>
+                    <input name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+                </label>
+                <button class="button button-primary button-block" type="submit">登录工作台</button>
+            </form>
+
+            <div class="demo-divider"><span>或选择一个演示身份</span></div>
+            <div class="demo-accounts">
+                <button type="button" class="demo-account" data-username="zhangsan" data-password="123456">
+                    <span class="avatar avatar-blue">张</span><span><strong>员工张三</strong><small>zhangsan / 123456</small></span>
+                </button>
+                <button type="button" class="demo-account" data-username="wangwu" data-password="123456">
+                    <span class="avatar avatar-green">王</span><span><strong>部门经理</strong><small>wangwu / 123456</small></span>
+                </button>
+                <button type="button" class="demo-account" data-username="zhaoliu" data-password="123456">
+                    <span class="avatar avatar-orange">赵</span><span><strong>HR</strong><small>zhaoliu / 123456</small></span>
+                </button>
+                <button type="button" class="demo-account" data-username="sunqi" data-password="123456">
+                    <span class="avatar avatar-purple">孙</span><span><strong>总监</strong><small>sunqi / 123456</small></span>
+                </button>
+                <button type="button" class="demo-account" data-username="lisi" data-password="123456">
+                    <span class="avatar avatar-blue">李</span><span><strong>员工李四</strong><small>lisi / 123456</small></span>
+                </button>
+                <button type="button" class="demo-account" data-username="admin" data-password="admin123">
+                    <span class="avatar avatar-slate">管</span><span><strong>管理员</strong><small>admin / admin123</small></span>
+                </button>
+            </div>
+            <p class="login-tip">演示环境使用 MySQL 数据库，业务数据和 Activiti 流程数据会持久保存。</p>
+        </div>
+    </section>
+</main>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

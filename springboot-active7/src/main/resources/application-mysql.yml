@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/springboot_active7?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: abcd@123456
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema-mysql.sql
+
+active7:
+  security:
+    jwt:
+      secret: active7-local-jwt-secret-2026-01b7608f2a1647df9f2648aa3c915d7e0

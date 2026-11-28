@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:activiti="http://activiti.org/bpmn"
+             targetNamespace="http://example.com/active7/leave"
+             expressionLanguage="http://www.omg.org/spec/BPMN/20100524/EL"
+             typeLanguage="http://www.w3.org/2001/XMLSchema">
+
+    <process id="leaveApproval" name="公司员工请假审批流程" isExecutable="true">
+
+        <documentation>
+            员工提交请假申请，经理审批；长假、病假、婚假、丧假进入 HR；
+            5 天及以上进入总监；全部通过后由员工确认安排，最后结束。
+            经理可以退回员工补充，员工在经理审批前可以撤回。
+        </documentation>
+
+        <startEvent id="start" name="员工提交请假"/>
+
+        <userTask id="managerApproval" name="部门经理审批"
+                  activiti:candidateUsers="wangwu">
+            <documentation>经理可以同意、拒绝，或者退回员工补充材料。</documentation>
+            <extensionElements>
+                <activiti:formProperty id="comment" name="审批意见" type="string"/>
+            </extensionElements>
+        </userTask>
+
+        <exclusiveGateway id="managerDecision" name="经理审批结果" default="managerReject"/>
+
+        <exclusiveGateway id="hrCheck" name="是否需要 HR 审批" default="hrNotRequired"/>
+        <userTask id="hrApproval" name="HR 审批"
+                  activiti:candidateUsers="zhaoliu"/>
+        <exclusiveGateway id="hrDecision" name="HR 审批结果" default="hrDecisionToEnd"/>
+
+        <exclusiveGateway id="directorCheck" name="是否需要总监审批" default="directorNotRequired"/>
+        <userTask id="directorApproval" name="总监审批"
+                  activiti:candidateUsers="sunqi"/>
+        <exclusiveGateway id="directorDecision" name="总监审批结果" default="directorDecisionToEnd"/>
+
+        <userTask id="employeeResubmit" name="员工补充并重新提交"
+                  activiti:assignee="${applicant}"/>
+        <userTask id="employeeConfirm" name="员工确认请假安排"
+                  activiti:assignee="${applicant}"/>
+
+        <endEvent id="leaveEnd" name="请假流程结束">
+            <extensionElements>
+                <activiti:executionListener event="end"
+                                            delegateExpression="${leaveEndListener}"/>
+            </extensionElements>
+        </endEvent>
+
+        <sequenceFlow id="startToManager" sourceRef="start" targetRef="managerApproval"/>
+
+        <sequenceFlow id="managerApproved" name="同意" sourceRef="managerDecision"
+                      targetRef="hrCheck">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approveManager == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="managerReturn" name="退回补充" sourceRef="managerDecision"
+                      targetRef="employeeResubmit">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${returnToEmployee == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="managerReject" name="拒绝" sourceRef="managerDecision"
+                      targetRef="leaveEnd"/>
+
+        <sequenceFlow id="hrRequired" name="需要" sourceRef="hrCheck" targetRef="hrApproval">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${needHr == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="hrNotRequired" name="不需要" sourceRef="hrCheck" targetRef="directorCheck"/>
+
+        <sequenceFlow id="directorRequired" name="需要" sourceRef="directorCheck"
+                      targetRef="directorApproval">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${needDirector == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="directorNotRequired" name="不需要" sourceRef="directorCheck"
+                      targetRef="employeeConfirm"/>
+
+        <sequenceFlow id="managerToHr" sourceRef="managerApproval" targetRef="managerDecision"/>
+        <sequenceFlow id="hrToDecision" sourceRef="hrApproval" targetRef="hrDecision"/>
+        <sequenceFlow id="hrApproved" name="同意" sourceRef="hrDecision" targetRef="directorCheck">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hrApproved == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="hrDecisionToEnd" name="拒绝" sourceRef="hrDecision" targetRef="leaveEnd"/>
+
+        <sequenceFlow id="directorToDecision" sourceRef="directorApproval" targetRef="directorDecision"/>
+        <sequenceFlow id="directorApproved" name="同意" sourceRef="directorDecision"
+                      targetRef="employeeConfirm">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${directorApproved == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="directorDecisionToEnd" name="拒绝" sourceRef="directorDecision"
+                      targetRef="leaveEnd"/>
+
+        <sequenceFlow id="resubmitToManager" sourceRef="employeeResubmit" targetRef="managerApproval"/>
+        <sequenceFlow id="confirmToEnd" sourceRef="employeeConfirm" targetRef="leaveEnd"/>
+
+    </process>
+</definitions>
