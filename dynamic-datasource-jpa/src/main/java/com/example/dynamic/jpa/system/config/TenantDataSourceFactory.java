@@ -48,14 +48,16 @@ public class TenantDataSourceFactory {
         dds.setMinIdle(pool.getMinIdle());
         dds.setMaxActive(pool.getMaxActive());
         dds.setMaxWait(pool.getMaxWait());
+        dds.setConnectTimeout(pool.getConnectTimeoutMillis());
+        dds.setSocketTimeout(pool.getSocketTimeoutMillis());
+        dds.setTimeBetweenEvictionRunsMillis(Math.min(pool.getIdleEvictMillis(), 60000L));
+        dds.setMinEvictableIdleTimeMillis(pool.getIdleEvictMillis());
 
         // 连接有效性/回收策略沿用系统库基础配置
         dds.setValidationQuery(base.getValidationQuery());
         dds.setTestWhileIdle(base.isTestWhileIdle());
         dds.setTestOnBorrow(base.isTestOnBorrow());
         dds.setTestOnReturn(base.isTestOnReturn());
-        dds.setTimeBetweenEvictionRunsMillis(base.getTimeBetweenEvictionRunsMillis());
-        dds.setMinEvictableIdleTimeMillis(base.getMinEvictableIdleTimeMillis());
         dds.setPoolPreparedStatements(base.isPoolPreparedStatements());
         dds.setMaxPoolPreparedStatementPerConnectionSize(base.getMaxPoolPreparedStatementPerConnectionSize());
 

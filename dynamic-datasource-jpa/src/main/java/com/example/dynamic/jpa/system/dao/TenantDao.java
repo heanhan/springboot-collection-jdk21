@@ -4,25 +4,23 @@ import com.example.dynamic.jpa.system.entity.Tenant;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
-/**
- * <p>
- * saas租户 Mapper 接口
- * </p>
- *
- * @author zhaojh
- */
+import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface TenantDao extends BaseRepository<Tenant,Integer>, JpaSpecificationExecutor<Tenant> {
+public interface TenantDao extends BaseRepository<Tenant, Integer>, JpaSpecificationExecutor<Tenant> {
 
-    java.util.Optional<Tenant> findByIdAndIsDelFalse(Integer id);
+    Optional<Tenant> findByIdAndIsDelFalse(Integer id);
 
-    java.util.Optional<Tenant> findByTenantNameAndIsDelFalse(String tenantName);
+    Optional<Tenant> findByTenantCodeAndIsDelFalse(String tenantCode);
 
-    java.util.List<Tenant> findAllByIsDelFalse();
+    Optional<Tenant> findByTenantNameAndIsDelFalse(String tenantName);
 
-    boolean existsByPhoneAndIsDelFalse(String phone);
+    List<Tenant> findAllByIsDelFalseOrderByIdDesc();
+
+    boolean existsByTenantCodeAndIsDelFalse(String tenantCode);
 
     boolean existsByPhoneAndIdNotAndIsDelFalse(String phone, Integer id);
 
+    boolean existsByPhoneAndIsDelFalse(String phone);
 }

@@ -6,11 +6,6 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * 权限节点数据层
- *
- * @author zhaojh
- */
 @Repository
 public interface AuthNodeDao extends BaseRepository<AuthNode, Integer> {
 
@@ -21,4 +16,6 @@ public interface AuthNodeDao extends BaseRepository<AuthNode, Integer> {
     boolean existsByPathAndMethodAndIsDelFalse(String path, String method);
 
     boolean existsByPathAndMethodIsNullAndIsDelFalse(String path);
+
+    boolean existsByPermissionCodeAndIsDelFalse(String permissionCode);
 }

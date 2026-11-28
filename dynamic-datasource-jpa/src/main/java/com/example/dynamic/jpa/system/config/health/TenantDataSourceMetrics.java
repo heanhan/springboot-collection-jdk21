@@ -18,7 +18,7 @@ public class TenantDataSourceMetrics {
 
     private static final Object SYSTEM_KEY = Integer.valueOf(0);
 
-    public TenantDataSourceMetrics(MeterRegistry registry, @Qualifier("multipleDataSource") DataSource router) {
+    public TenantDataSourceMetrics(MeterRegistry registry, @Qualifier("tenantDataSource") DataSource router) {
         DynamicDataSource dynamicDataSource = (DynamicDataSource) router;
         Gauge.builder("dynjpa.tenant.datasources", dynamicDataSource, TenantDataSourceMetrics::countTenants)
                 .description("已注册的租户数据源数量（不含系统库）")

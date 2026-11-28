@@ -2,51 +2,27 @@ package com.example.dynamic.jpa.system.dao;
 
 import com.example.dynamic.jpa.system.entity.User;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-/**
- * <p>
- * 系統用戶表 Mapper 接口
- * </p>
- *
- * @author zhaojh
- */
+import java.util.List;
+import java.util.Optional;
+
 @Repository
-public interface UserDao extends BaseRepository<User,Integer>, JpaSpecificationExecutor<User> {
+public interface UserDao extends BaseRepository<User, Integer>, JpaSpecificationExecutor<User> {
 
-    /**
-     * 更加用户id获取用户详细信息
-     *
-     * @param userId id
-     * @return java.util.Map<java.lang.String, java.lang.Object>
-     */
-//    Map<String, Object> getUserDetailById(Integer userId);
+    Optional<User> findFirstByUsernameAndTenantIdAndStatus(String username, Integer tenantId, Integer status);
 
-    /**
-     * 获取租户或经销商所有指定角色类型的用户数据
-     *
-     * @param tenantId   租户id
-     * @param operatorId 经销商ID
-     * @param roleType   角色类型
-     * @return java.util.List<cn.greenbon.api.business.system.bean.User>
-     */
-//    List<User> listUserByRoleType(Integer tenantId, Integer operatorId, Integer roleType);
+    Optional<User> findByIdAndStatus(Integer id, Integer status);
 
-    /**
-     * 获取租户或经销商所有指定用户类型的用户数据
-     * @return java.util.List<cn.greenbon.api.business.system.bean.User>
-     */
-//    List<User> listUserByType(Integer tenantId, Integer operatorId, Integer userType);
+    List<User> findAllByTenantId(Integer tenantId);
 
-    @Query(value = "select * from sys_user where username=?1 and status=?2 ",nativeQuery = true)
-    User getUserByName(String username, int value);
+    List<User> findAllByTenantIdAndStatusOrderByIdAsc(Integer tenantId, Integer status);
 
-    boolean existsByUsername(String username);
+    boolean existsByUsernameAndTenantId(String username, Integer tenantId);
 
-    boolean existsByPhoneAndStatus(String phone, Integer status);
+    boolean existsByPhoneAndTenantIdAndStatus(String phone, Integer tenantId, Integer status);
 
-    boolean existsByPhoneAndIdNotAndStatus(String phone, Integer id, Integer status);
+    boolean existsByPhoneAndTenantIdAndIdNotAndStatus(String phone, Integer tenantId, Integer id, Integer status);
 
     boolean existsByRoleIdAndStatus(Integer roleId, Integer status);
 }

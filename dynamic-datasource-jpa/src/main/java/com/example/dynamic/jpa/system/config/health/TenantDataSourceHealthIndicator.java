@@ -24,9 +24,13 @@ public class TenantDataSourceHealthIndicator implements HealthIndicator {
 
     private static final Object SYSTEM_KEY = Integer.valueOf(0);
 
+    private final DataSource systemDataSource;
+
     private final DynamicDataSource router;
 
-    public TenantDataSourceHealthIndicator(@Qualifier("multipleDataSource") DataSource router) {
+    public TenantDataSourceHealthIndicator(@Qualifier("systemDataSource") DataSource systemDataSource,
+                                            @Qualifier("tenantDataSource") DataSource router) {
+        this.systemDataSource = systemDataSource;
         this.router = (DynamicDataSource) router;
     }
 
@@ -34,7 +38,7 @@ public class TenantDataSourceHealthIndicator implements HealthIndicator {
     public Health health() {
         try {
             Map<Object, DataSource> resolved = router.getResolvedDataSources();
-            boolean systemUp = resolved.containsKey(SYSTEM_KEY);
+            boolean systemUp = systemDataSource != null;
             Health.Builder builder = systemUp ? Health.up() : Health.down();
             builder.withDetail("systemDataSource", systemUp ? "registered" : "missing");
             int tenantCount = 0;

@@ -1,33 +1,27 @@
 package com.example.dynamic.jpa.system.service.impl;
 
 import com.example.dynamic.jpa.common.constants.SystemConstant;
-import com.example.dynamic.jpa.common.util.RightsUtils;
 import com.example.dynamic.jpa.exception.BaseException;
 import com.example.dynamic.jpa.exception.ExceptionCode;
 import com.example.dynamic.jpa.system.dao.AuthNodeDao;
 import com.example.dynamic.jpa.system.dao.RoleDao;
+import com.example.dynamic.jpa.system.dao.RolePermissionDao;
 import com.example.dynamic.jpa.system.entity.AuthNode;
-import com.example.dynamic.jpa.system.entity.Role;
 import com.example.dynamic.jpa.system.service.AuthNodeService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Validate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
-/**
- * 权限节点服务实现
- *
- * @author zhaojh
- */
 @Service
-@Transactional(rollbackFor = Exception.class)
+@Transactional(value = "systemTransactionManager", rollbackFor = Exception.class)
 public class AuthNodeServiceImpl implements AuthNodeService {
 
     @Resource
@@ -35,6 +29,9 @@ public class AuthNodeServiceImpl implements AuthNodeService {
 
     @Resource
     private RoleDao roleDao;
+
+    @Resource
+    private RolePermissionDao rolePermissionDao;
 
     private volatile List<AuthNode> activeNodeCache;
 
@@ -54,44 +51,31 @@ public class AuthNodeServiceImpl implements AuthNodeService {
 
     @Override
     public List<AuthNode> listAuthNodesByRole(Integer roleId) {
-        Role role = roleId == null ? null : roleDao.findByIdAndIsDelFalse(roleId).orElse(null);
-        if (role == null || StringUtils.isBlank(role.getNodeRights()) || !StringUtils.isNumeric(role.getNodeRights())) {
+        if (roleDao.findByIdAndIsDelFalse(roleId).isEmpty()) {
             return Collections.emptyList();
         }
-        BigInteger nodeRights = new BigInteger(role.getNodeRights());
+        Set<String> permissions = rolePermissionDao.findByRoleId(roleId).stream()
+                .map(permission -> permission.getPermissionCode())
+                .collect(java.util.stream.Collectors.toSet());
         return listActiveAuthNodes().stream()
-                .filter(node -> RightsUtils.testRights(nodeRights, node.getId()))
+                .filter(node -> permissions.contains(node.getPermissionCode()))
                 .toList();
     }
 
     @Override
     public List<AuthNode> listAuthNodeTreeByRole(Integer roleId) {
-        List<AuthNode> nodes = listAuthNodesByRole(roleId);
-        return buildTree(nodes);
-    }
-
-    @Override
-    public List<String> listRolesForNode(AuthNode authNode) {
-        if (authNode == null || authNode.getId() == null) {
-            return Collections.emptyList();
-        }
-        return roleDao.findAllByIsDelFalseOrderByIdAsc().stream()
-                .filter(role -> StringUtils.isNotBlank(role.getRoleName())
-                        && StringUtils.isNotBlank(role.getNodeRights())
-                        && StringUtils.isNumeric(role.getNodeRights())
-                        && RightsUtils.testRights(new BigInteger(role.getNodeRights()), authNode.getId()))
-                .map(Role::getRoleName)
-                .distinct()
-                .toList();
+        return buildTree(listAuthNodesByRole(roleId));
     }
 
     @Override
     public AuthNode addAuthNode(AuthNode authNode) {
-        Validate.notNull(authNode, "权限节点不能为空");
+        if (authNode == null) {
+            throw new BaseException("权限节点不能为空");
+        }
         normalize(authNode);
         authNode.setId(null);
         authNode.setIsDel(false);
-        authNode.setCreateTime(new java.util.Date());
+        authNode.setCreateTime(new Date());
         if (existsSameEndpoint(authNode.getPath(), authNode.getMethod(), null)) {
             throw new BaseException("权限节点已存在");
         }
@@ -102,7 +86,9 @@ public class AuthNodeServiceImpl implements AuthNodeService {
 
     @Override
     public AuthNode editAuthNode(AuthNode authNode) {
-        Validate.notNull(authNode, "权限节点不能为空");
+        if (authNode == null) {
+            throw new BaseException("权限节点不能为空");
+        }
         AuthNode existing = getAuthNodeById(authNode.getId());
         if (existing == null) {
             throw new BaseException("权限节点不存在");
@@ -114,9 +100,10 @@ public class AuthNodeServiceImpl implements AuthNodeService {
         existing.setName(authNode.getName());
         existing.setPath(authNode.getPath());
         existing.setMethod(authNode.getMethod());
+        existing.setPermissionCode(authNode.getPermissionCode());
         existing.setParentId(authNode.getParentId());
         existing.setListOrder(authNode.getListOrder());
-        existing.setUpdateTime(new java.util.Date());
+        existing.setUpdateTime(new Date());
         AuthNode saved = authNodeDao.save(existing);
         refreshActiveAuthNodes();
         return saved;
@@ -129,7 +116,7 @@ public class AuthNodeServiceImpl implements AuthNodeService {
             throw new BaseException(ExceptionCode.DELETE.getCode(), "权限节点不存在");
         }
         existing.setIsDel(true);
-        existing.setUpdateTime(new java.util.Date());
+        existing.setUpdateTime(new Date());
         authNodeDao.save(existing);
         refreshActiveAuthNodes();
         return true;
@@ -142,7 +129,12 @@ public class AuthNodeServiceImpl implements AuthNodeService {
 
     private synchronized List<AuthNode> reloadActiveNodes() {
         List<AuthNode> nodes = authNodeDao.findAllByIsDelFalseOrderByIdAsc();
-        nodes.forEach(this::normalize);
+        nodes.forEach(node -> {
+            if (StringUtils.isBlank(node.getPermissionCode())) {
+                throw new BaseException("权限节点缺少权限编码: " + node.getPath());
+            }
+            node.setPermissionCode(node.getPermissionCode().trim().toUpperCase());
+        });
         activeNodeCache = Collections.unmodifiableList(new ArrayList<>(nodes));
         return activeNodeCache;
     }
@@ -167,6 +159,11 @@ public class AuthNodeServiceImpl implements AuthNodeService {
         authNode.setPath(authNode.getPath().trim());
         authNode.setMethod(StringUtils.isBlank(authNode.getMethod())
                 ? null : authNode.getMethod().trim().toUpperCase());
+        if (StringUtils.isBlank(authNode.getPermissionCode())
+                || !authNode.getPermissionCode().trim().matches("^[A-Z][A-Z0-9_:.-]{2,63}$")) {
+            throw new BaseException("权限编码格式错误");
+        }
+        authNode.setPermissionCode(authNode.getPermissionCode().trim().toUpperCase());
         if (authNode.getParentId() == null) {
             authNode.setParentId(SystemConstant.ROOT_PARENT_ID);
         }

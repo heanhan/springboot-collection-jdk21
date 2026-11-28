@@ -55,6 +55,10 @@ public class TenantDataSourceProperties {
         private int minIdle = 0;
         private int maxActive = 8;
         private int maxWait = 10000;
+        private int connectTimeoutMillis = 3000;
+        private int socketTimeoutMillis = 10000;
+        private long idleEvictMillis = 1800000;
+        private int maxTotalConnections = 200;
     }
 
     @Data
@@ -75,13 +79,20 @@ public class TenantDataSourceProperties {
 
     @Data
     public static class ClusterSync {
-        /**
-         * 是否开启多实例路由变更广播
-         */
         private boolean enabled = false;
-        /**
-         * Redis Pub/Sub 频道名
-         */
         private String channel = "dynjpa:datasource:changes";
     }
+
+    @Data
+    public static class Provisioner {
+        private String host = "127.0.0.1";
+        private int port = 3306;
+        private String username = "";
+        private String password = "";
+        private boolean createUser = true;
+        private String userHost = "%";
+        private String sslMode = "DISABLED";
+    }
+
+    private Provisioner provisioner = new Provisioner();
 }

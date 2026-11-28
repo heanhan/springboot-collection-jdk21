@@ -39,7 +39,7 @@ public class InitDataSourceConfiguration implements ApplicationListener<ContextR
 
     private final TenantDataSourceProperties properties;
 
-    @Resource(name = "multipleDataSource")
+    @Resource(name = "tenantDataSource")
     private DataSource dataSource;
 
     public InitDataSourceConfiguration(TenantDataInfoService tenantDataInfoService,
@@ -94,8 +94,6 @@ public class InitDataSourceConfiguration implements ApplicationListener<ContextR
                 }
             }
         }
-        // 启动完成，开启运行期缺失租户上下文告警
-        router.markRuntimeReady();
         log.info("租户数据源初始化完成：成功 {} 个，失败 {} 个（懒加载兜底）", loaded, failed);
     }
 }

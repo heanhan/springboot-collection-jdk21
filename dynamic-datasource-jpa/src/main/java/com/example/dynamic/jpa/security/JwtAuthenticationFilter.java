@@ -54,6 +54,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) throws IOException, ServletException {
         LoginInfoHolder.clear();
         try {
+            if (isLogoutRequest(request)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             String header = request.getHeader(JwtUtil.TOKEN_HEADER);
             if (StringUtils.isNotBlank(header)) {
                 try {
@@ -61,6 +65,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         throw new JwtException("token格式错误");
                     }
                     SecurityContextHolder.getContext().setAuthentication(getAuthentication(header));
+                    if (SecurityContextHolder.getContext().getAuthentication().getPrincipal()
+                            instanceof com.example.dynamic.jpa.security.JwtUser jwtUser) {
+                        LoginInfoHolder.setTenant(LoginInfo.fromUser(jwtUser.getUser()));
+                    }
                 } catch (org.springframework.security.core.AuthenticationException e) {
                     SecurityContextHolder.clearContext();
                     authenticationEntryPoint.commence(request, response, e);
@@ -72,6 +80,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             LoginInfoHolder.clear();
             SecurityContextHolder.clearContext();
         }
+    }
+
+    private boolean isLogoutRequest(HttpServletRequest request) {
+        return "POST".equalsIgnoreCase(request.getMethod())
+                && request.getRequestURI().equals(request.getContextPath() + "/api/logout");
     }
 
     /**
@@ -94,8 +107,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     || !(claims.get(JwtUtil.EXTEND_INFO) instanceof java.util.Map<?, ?> info)
                     || !(info.get("userId") instanceof Number userId)
                     || !(info.get("tenantId") instanceof Number tenantId)
+                    || !(claims.get("tokenVersion") instanceof Number tokenVersion)
                     || !java.util.Objects.equals(userId.intValue(), jwtUser.getUser().getId())
-                    || !java.util.Objects.equals(tenantId.intValue(), jwtUser.getUser().getTenantId())) {
+                    || !java.util.Objects.equals(tenantId.intValue(), jwtUser.getUser().getTenantId())
+                    || tokenVersion.intValue() != (jwtUser.getUser().getTokenVersion() == null ? 0 : jwtUser.getUser().getTokenVersion())) {
                 throw new JwtException("token身份与当前用户不匹配");
             }
             return new UsernamePasswordAuthenticationToken(details, null, details.getAuthorities());

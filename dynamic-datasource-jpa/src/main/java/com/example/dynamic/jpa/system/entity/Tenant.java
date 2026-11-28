@@ -1,5 +1,6 @@
 package com.example.dynamic.jpa.system.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -14,17 +15,9 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-/**
- * <p>
- * saas租户
- * </p>
- *
- * @author zhaojh
- * @since 2022-11-05
- */
 @Data
 @Entity
-@Table(name ="sys_tenant")
+@Table(name = "sys_tenant")
 @DynamicInsert
 @DynamicUpdate
 public class Tenant implements Serializable {
@@ -35,39 +28,53 @@ public class Tenant implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
+    @Column(name = "tenant_code")
+    private String tenantCode;
+
     @NotBlank(message = "tenantName不能为空")
     @Column(name = "tenant_name")
     private String tenantName;
 
-    /**
-     * 邮箱
-     */
     @Column(name = "email")
     private String email;
 
-    /**
-     * 电话号码
-     */
-    @NotBlank(message = "phone不能为空")
     @Column(name = "phone")
     private String phone;
 
-    /**
-     * logo地址
-     */
     @Column(name = "logo_url")
     private String logoUrl;
 
-    /**
-     * 状态
-     */
+    @Column(name = "status")
+    private String status;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Column(name = "provision_status")
+    private String provisionStatus;
+
+    @Column(name = "database_name")
+    private String databaseName;
+
+    @Column(name = "schema_version")
+    private Integer schemaVersion;
+
+    @Column(name = "provision_error")
+    private String provisionError;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Column(name = "destroyed_at")
+    private LocalDateTime destroyedAt;
+
     @Column(name = "is_del")
     private Boolean isDel = false;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Column(name = "create_time")
     private LocalDateTime createTime;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Column(name = "update_time")
     private LocalDateTime updateTime;
-
 }

@@ -31,11 +31,6 @@ public interface AuthNodeService {
      */
     List<AuthNode> listAuthNodeTreeByRole(Integer roleId);
 
-    /**
-     * 获取拥有指定权限节点的角色名称
-     */
-    List<String> listRolesForNode(AuthNode authNode);
-
     AuthNode addAuthNode(AuthNode authNode);
 
     AuthNode editAuthNode(AuthNode authNode);

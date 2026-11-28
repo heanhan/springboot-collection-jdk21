@@ -27,7 +27,7 @@ public class RedisClusterSyncConfig {
 
     @Bean
     public DataSourceChangeListener dataSourceChangeListener(
-            @Qualifier("multipleDataSource") DataSource router,
+            @Qualifier("tenantDataSource") DataSource router,
             TenantDataInfoService tenantDataInfoService) {
         return new DataSourceChangeListener((DynamicDataSource) router, tenantDataInfoService);
     }

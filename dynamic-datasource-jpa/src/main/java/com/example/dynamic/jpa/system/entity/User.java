@@ -7,6 +7,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -16,6 +17,7 @@ import org.hibernate.annotations.DynamicUpdate;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * <p>
@@ -63,6 +65,7 @@ public class User implements Serializable {
      * 密码
      */
     @Column(name = "password")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String password;
 
     /**
@@ -109,6 +112,9 @@ public class User implements Serializable {
     @Column(name = "status")
     private Integer status;
 
+    @Column(name = "token_version")
+    private Integer tokenVersion = 0;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH-mm-ss")
     @Column(name = "update_time")
     private LocalDateTime updateTime;
@@ -119,6 +125,9 @@ public class User implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd HH-mm-ss")
     @Column(name = "create_time")
     private LocalDateTime createTime;
+
+    @Transient
+    private List<Integer> roleIds;
 
 
     public interface Add {

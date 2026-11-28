@@ -1,21 +1,21 @@
 package com.example.dynamic.jpa.system.service.impl;
 
-
 import com.example.dynamic.jpa.common.constants.SystemConstant;
 import com.example.dynamic.jpa.common.util.RightsUtils;
 import com.example.dynamic.jpa.exception.BaseException;
 import com.example.dynamic.jpa.exception.ExceptionCode;
 import com.example.dynamic.jpa.system.dao.RoleDao;
-import com.example.dynamic.jpa.system.dao.UserDao;
+import com.example.dynamic.jpa.system.dao.RolePermissionDao;
+import com.example.dynamic.jpa.system.dao.UserRoleDao;
 import com.example.dynamic.jpa.system.entity.AuthNode;
 import com.example.dynamic.jpa.system.entity.Menu;
 import com.example.dynamic.jpa.system.entity.Role;
+import com.example.dynamic.jpa.system.entity.RolePermission;
 import com.example.dynamic.jpa.system.service.AuthNodeService;
 import com.example.dynamic.jpa.system.service.MenuService;
 import com.example.dynamic.jpa.system.service.RoleService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Validate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,84 +23,53 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * <p>
- * 角色表 服务实现类
- * </p>
- *
- * @author zhaojh
- */
 @Service
-@Transactional(rollbackFor = Exception.class)
+@Transactional(value = "systemTransactionManager", rollbackFor = Exception.class)
 public class RoleServiceImpl implements RoleService {
 
     @Resource
-    public MenuService menuService;
+    private MenuService menuService;
 
     @Resource
-    public RoleDao roleDao;
+    private RoleDao roleDao;
 
     @Resource
-    private UserDao userDao;
+    private UserRoleDao userRoleDao;
+
+    @Resource
+    private RolePermissionDao rolePermissionDao;
 
     @Resource
     private AuthNodeService authNodeService;
 
-
-
-    @Override
-    public Role getAdminRole() {
-        return roleDao.findByRoleNameAndIsDelFalse(SystemConstant.ROLE_TENANT_ADMIN).orElse(null);
-    }
-
     @Override
     public List<Menu> listMenusByRole(Integer roleId, Integer type) {
         Role role = getRoleById(roleId);
-        if (role == null) {
-            return Collections.emptyList();
-        }
-        //没有相关的权限数据
-        if (StringUtils.isEmpty(role.getMenuRights())) {
+        if (role == null || StringUtils.isEmpty(role.getMenuRights())) {
             return Collections.emptyList();
         }
         List<Menu> menus = menuService.listAll();
-        if (menus.isEmpty()) {
-            return Collections.emptyList();
-        }
-        // 筛选类型
         if (type != null) {
-            menus = menus.stream().filter(item -> item.getType().equals(type)).collect(Collectors.toList());
+            menus = menus.stream().filter(item -> Objects.equals(item.getType(), type)).collect(Collectors.toList());
         }
-        // 如果是admin用户直接返回，不需要判断
-        List<Menu> resultMenus = new ArrayList<>();
-        // 判断是否拥有该权限
-        for (Menu menu : menus) {
-            if (RightsUtils.testRights(role.getMenuRights(), menu.getId())) {
-                resultMenus.add(menu);
-            }
-        }
-        return resultMenus;
+        return menus.stream()
+                .filter(menu -> RightsUtils.testRights(role.getMenuRights(), menu.getId()))
+                .collect(Collectors.toList());
     }
 
     @Override
     public List<Menu> listRoleMenusForTree(Integer roleId) {
-        Validate.notNull(roleId, "角色id不能为空");
         Role role = getRoleById(roleId);
-        if (role == null) {
+        if (role == null || StringUtils.isEmpty(role.getMenuRights())) {
             return Collections.emptyList();
         }
-        if (StringUtils.isEmpty(role.getMenuRights())) {
-            return Collections.emptyList();
-        }
-        // 获取所有的菜单
         List<Menu> menus = menuService.listByPidInTree(SystemConstant.ROOT_PARENT_ID);
-        if (menus.isEmpty()) {
-            return Collections.emptyList();
-        }
-        // 筛选出当前角色的菜单
         hasMenuPermission(new BigInteger(role.getMenuRights()), menus);
         return menus;
     }
@@ -111,27 +80,85 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public List<Role> listRoles() {
-        return roleDao.findAllByIsDelFalseOrderByIdAsc();
+    public List<Role> listRoles(Integer tenantId) {
+        return roleDao.findAllByTenantIdAndIsDelFalseOrderByIdAsc(tenantId).stream()
+                .peek(role -> role.setPermissionCodes(listRolePermissions(role.getId())))
+                .toList();
+    }
+
+    @Override
+    public List<String> listRolePermissions(Integer roleId) {
+        return rolePermissionDao.findByRoleId(roleId).stream()
+                .map(RolePermission::getPermissionCode)
+                .distinct().sorted().toList();
+    }
+
+    @Override
+    public void replaceRolePermissions(Integer roleId, List<String> permissionCodes) {
+        Role role = getRoleById(roleId);
+        if (role == null) {
+            throw new BaseException("角色不存在");
+        }
+        Set<String> activeCodes = authNodeService.listActiveAuthNodes().stream()
+                .map(AuthNode::getPermissionCode)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toSet());
+        Set<String> requested = permissionCodes == null ? Collections.emptySet() : new HashSet<>(permissionCodes);
+        if (SystemConstant.ROLE_TENANT_ADMIN.equals(role.getRoleCode())) {
+            Set<String> current = listRolePermissions(roleId).stream().collect(Collectors.toSet());
+            if (!current.isEmpty() && !current.equals(requested)) {
+                throw new BaseException("不能修改内置管理员角色权限");
+            }
+        }
+        if (!activeCodes.containsAll(requested)) {
+            throw new BaseException("存在无效的权限编码");
+        }
+        rolePermissionDao.deleteByRoleId(roleId);
+        rolePermissionDao.flush();
+        for (String code : requested) {
+            RolePermission permission = new RolePermission();
+            permission.setRoleId(roleId);
+            permission.setPermissionCode(code);
+            permission.setCreateTime(LocalDateTime.now());
+            rolePermissionDao.save(permission);
+        }
+        role.setUpdateTime(LocalDateTime.now());
+        roleDao.save(role);
     }
 
     @Override
     public boolean addRole(Role role) {
-        Validate.notNull(role, "角色不能为空");
-        if (StringUtils.isBlank(role.getRoleName())) {
+        if (role == null || StringUtils.isBlank(role.getRoleName())) {
             throw new BaseException("角色名称不能为空");
         }
-        role.setId(null);
-        role.setRoleName(role.getRoleName().trim());
-        if (roleDao.existsByRoleNameAndIsDelFalse(role.getRoleName())) {
+        if (role.getTenantId() == null || role.getTenantId() < 0) {
+            throw new BaseException("租户id错误");
+        }
+        String roleName = role.getRoleName().trim();
+        if (roleDao.findAllByTenantIdAndIsDelFalseOrderByIdAsc(role.getTenantId()).stream()
+                .anyMatch(item -> Objects.equals(item.getRoleName(), roleName))) {
             throw new BaseException("角色名称已存在");
         }
+        String roleCode = StringUtils.isBlank(role.getRoleCode())
+                ? "ROLE_CUSTOM_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12)
+                : role.getRoleCode().trim().toUpperCase();
+        if (roleDao.existsByRoleCodeAndTenantIdAndIsDelFalse(roleCode, role.getTenantId())) {
+            throw new BaseException("角色编码已存在");
+        }
+        role.setId(null);
+        role.setTenantId(role.getTenantId());
+        role.setRoleCode(roleCode);
+        role.setRoleName(roleName);
         if (role.getParentId() == null) {
             role.setParentId(SystemConstant.ROOT_PARENT_ID);
         }
+        if (role.getMenuRights() == null) {
+            role.setMenuRights("0");
+        }
         role.setIsDel(false);
         role.setCreateTime(LocalDateTime.now());
-        roleDao.save(role);
+        Role saved = roleDao.save(role);
+        replaceRolePermissions(saved.getId(), role.getPermissionCodes());
         return true;
     }
 
@@ -141,18 +168,19 @@ public class RoleServiceImpl implements RoleService {
         if (role == null) {
             throw new BaseException(ExceptionCode.DELETE.getCode(), "角色不存在");
         }
-        if (userDao.existsByRoleIdAndStatus(roleId, com.example.dynamic.jpa.common.enums.UserStatus.NORMAL.getValue())) {
-            throw new BaseException(ExceptionCode.DELETE.getCode(), "角色下仍有正常用户，不能删除");
+        if (SystemConstant.ROLE_TENANT_ADMIN.equals(role.getRoleCode())) {
+            throw new BaseException(ExceptionCode.DELETE.getCode(), "内置管理员角色不能删除");
+        }
+        if (userRoleDao.countByRoleId(roleId) > 0) {
+            throw new BaseException(ExceptionCode.DELETE.getCode(), "角色下仍有用户，不能删除");
         }
         role.setIsDel(true);
         role.setUpdateTime(LocalDateTime.now());
         roleDao.save(role);
+        rolePermissionDao.deleteByRoleId(roleId);
         return true;
     }
 
-    /**
-     * 判断是否拥有这种权限
-     */
     private void hasMenuPermission(BigInteger rights, List<Menu> list) {
         for (Menu menu : list) {
             if (!menu.getChildren().isEmpty()) {
@@ -168,37 +196,48 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public boolean deleteRoles(List<Integer> roleIds) {
-        Validate.notEmpty(roleIds, "角色id列表不能为空");
-        roleIds.forEach(item -> {
-            boolean b = deleteRole(item);
-            if (!b) {
-                throw new BaseException("删除失败");
-            }
-        });
+        if (roleIds == null || roleIds.isEmpty()) {
+            throw new BaseException("角色id列表不能为空");
+        }
+        roleIds.forEach(this::deleteRole);
         return true;
     }
 
     @Override
     public boolean updateRole(Role role) {
-        Validate.notNull(role, "角色不能为空");
+        if (role == null || role.getId() == null) {
+            throw new BaseException(ExceptionCode.EDIT.getCode(), "角色id不能为空");
+        }
         Role existing = getRoleById(role.getId());
         if (existing == null) {
             throw new BaseException(ExceptionCode.EDIT.getCode(), "角色不存在");
         }
         if (StringUtils.isNotBlank(role.getRoleName())) {
             String roleName = role.getRoleName().trim();
-            if (roleDao.existsByRoleNameAndIdNotAndIsDelFalse(roleName, existing.getId())) {
+            if (roleDao.findAllByTenantIdAndIsDelFalseOrderByIdAsc(existing.getTenantId()).stream()
+                    .anyMatch(item -> !Objects.equals(item.getId(), existing.getId())
+                            && Objects.equals(item.getRoleName(), roleName))) {
                 throw new BaseException(ExceptionCode.EDIT.getCode(), "角色名称已存在");
             }
             existing.setRoleName(roleName);
         }
+        if (SystemConstant.ROLE_TENANT_ADMIN.equals(existing.getRoleCode())
+                && role.getPermissionCodes() != null) {
+            Set<String> current = new HashSet<>(listRolePermissions(existing.getId()));
+            if (!current.equals(new HashSet<>(role.getPermissionCodes()))) {
+                throw new BaseException(ExceptionCode.EDIT.getCode(), "不能修改内置管理员角色权限");
+            }
+        }
         existing.setDescription(role.getDescription());
-        existing.setMenuRights(role.getMenuRights());
-        existing.setNodeRights(role.getNodeRights());
+        existing.setMenuRights(role.getMenuRights() == null ? existing.getMenuRights() : role.getMenuRights());
+        existing.setNodeRights(role.getNodeRights() == null ? existing.getNodeRights() : role.getNodeRights());
         existing.setParentId(role.getParentId() == null ? existing.getParentId() : role.getParentId());
         existing.setType(role.getType());
         existing.setUpdateTime(LocalDateTime.now());
         roleDao.save(existing);
+        if (role.getPermissionCodes() != null) {
+            replaceRolePermissions(existing.getId(), role.getPermissionCodes());
+        }
         return true;
     }
 
@@ -206,5 +245,4 @@ public class RoleServiceImpl implements RoleService {
     public Role getRoleById(Integer roleId) {
         return roleId == null ? null : roleDao.findByIdAndIsDelFalse(roleId).orElse(null);
     }
-
 }

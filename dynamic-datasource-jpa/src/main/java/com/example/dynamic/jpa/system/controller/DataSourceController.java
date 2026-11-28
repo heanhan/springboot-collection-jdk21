@@ -1,43 +1,46 @@
 package com.example.dynamic.jpa.system.controller;
 
-
 import com.example.common.result.ResultBody;
-import com.example.dynamic.jpa.system.config.MyDataSource;
-import com.example.dynamic.jpa.system.entity.DataSourceType;
+import com.example.dynamic.jpa.system.entity.TenantData;
 import com.example.dynamic.jpa.system.service.TenantDataInfoService;
-import com.example.dynamic.jpa.system.vo.AddDataSourceReqVo;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
 import com.example.dynamic.jpa.security.JwtUser;
+import jakarta.annotation.Resource;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-
-/**
- * @Author: zhaojh
- * @ClassName: TestController
- * @Description: 数据源接口
- */
 @RestController
-@RequestMapping("/api/dataSource")
-@MyDataSource(type = DataSourceType.SYSTEM)
+@RequestMapping("/api/tenants/{tenantId}/datasource")
 public class DataSourceController {
 
-    @Autowired
+    @Resource
     private TenantDataInfoService tenantDataInfoService;
 
-    @PostMapping("addDataSource")
-    public ResultBody addDataSource(@RequestBody @Valid AddDataSourceReqVo reqVo) {
-        JwtUser principal = (JwtUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Integer currentTenant = principal.getUser().getTenantId();
-        if (currentTenant == null || (currentTenant != 0 && !currentTenant.equals(reqVo.getTenantId()))) {
-            throw new AccessDeniedException("不能管理其他租户的数据源");
-        }
-        return ResultBody.success(tenantDataInfoService.addTenantDataInfo(reqVo));
+    @GetMapping
+    public ResultBody getDataSource(@PathVariable Integer tenantId) {
+        assertScope(tenantId);
+        TenantData data = tenantDataInfoService.getTenantData(tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("租户数据源不存在"));
+        return ResultBody.success(data);
     }
 
+    @PostMapping("/test")
+    public ResultBody testDataSource(@PathVariable Integer tenantId) {
+        assertScope(tenantId);
+        tenantDataInfoService.testTenantDataSource(tenantId);
+        return ResultBody.success("连接测试成功");
+    }
+
+    private void assertScope(Integer tenantId) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof JwtUser user)) {
+            throw new org.springframework.security.access.AccessDeniedException("登录状态无效");
+        }
+        if (user.getUser().getTenantId() != 0 && !user.getUser().getTenantId().equals(tenantId)) {
+            throw new org.springframework.security.access.AccessDeniedException("不能查看其他租户数据源");
+        }
+    }
 }

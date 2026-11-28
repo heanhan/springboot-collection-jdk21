@@ -51,16 +51,10 @@ public class RbacAuthorizationManager implements AuthorizationManager<RequestAut
         Set<String> authorities = auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
-        for (AuthNode node : matched) {
-            List<String> allowedRoles = authNodeService.listRolesForNode(node);
-            if (allowedRoles.isEmpty()) {
-                return new AuthorizationDecision(false);
-            }
-            if (authorities.stream().anyMatch(allowedRoles::contains)) {
-                return new AuthorizationDecision(true);
-            }
-        }
-        return new AuthorizationDecision(false);
+        return new AuthorizationDecision(matched.stream()
+                .map(AuthNode::getPermissionCode)
+                .filter(StringUtils::isNotBlank)
+                .anyMatch(authorities::contains));
     }
 
     private String resolvePath(String requestUri, String contextPath) {

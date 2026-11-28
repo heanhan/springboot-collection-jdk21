@@ -1,11 +1,9 @@
 package com.example.dynamic.jpa.system.service.impl;
 
-
+import com.alibaba.druid.pool.DruidDataSource;
 import com.example.dynamic.jpa.exception.BaseException;
 import com.example.dynamic.jpa.system.config.DynamicDataSource;
-import com.example.dynamic.jpa.system.config.LoginInfoHolder;
 import com.example.dynamic.jpa.system.config.TenantDataSourceFactory;
-import com.example.dynamic.jpa.system.config.TenantPasswordCipher;
 import com.example.dynamic.jpa.system.config.cluster.DataSourceChangeEvent;
 import com.example.dynamic.jpa.system.config.cluster.DataSourceChangePublisher;
 import com.example.dynamic.jpa.system.dao.TenantDao;
@@ -13,26 +11,20 @@ import com.example.dynamic.jpa.system.dao.TenantDataInfoDao;
 import com.example.dynamic.jpa.system.entity.Tenant;
 import com.example.dynamic.jpa.system.entity.TenantData;
 import com.example.dynamic.jpa.system.service.TenantDataInfoService;
-import com.example.dynamic.jpa.system.vo.AddDataSourceReqVo;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import com.alibaba.druid.pool.DruidDataSource;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-/**
- * @Author: zhaojh
- * @ClassName: TenantIdInfoServiceImpl
- * @Description: 租户数据库连接信息实现类
- */
-@Slf4j
 @Service
 public class TenantDataInfoServiceImpl implements TenantDataInfoService {
 
@@ -42,15 +34,11 @@ public class TenantDataInfoServiceImpl implements TenantDataInfoService {
     @Resource
     private TenantDataInfoDao tenantDataInfoDao;
 
-    @Qualifier("multipleDataSource")
-    @Autowired
+    @Resource(name = "tenantDataSource")
     private DynamicDataSource dataSource;
 
     @Resource
     private TenantDataSourceFactory tenantDataSourceFactory;
-
-    @Resource
-    private TenantPasswordCipher passwordCipher;
 
     @Resource
     private DataSourceChangePublisher changePublisher;
@@ -66,120 +54,119 @@ public class TenantDataInfoServiceImpl implements TenantDataInfoService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    public Optional<TenantData> getTenantData(Integer tenantId) {
+        return tenantDataInfoDao.findByTenantId(tenantId);
+    }
+
+    @Override
+    @Transactional(value = "systemTransactionManager", rollbackFor = Exception.class)
+    public TenantData saveTenantData(TenantData tenantData) {
+        return tenantDataInfoDao.saveAndFlush(tenantData);
+    }
+
+    @Override
+    @Transactional(value = "systemTransactionManager", rollbackFor = Exception.class)
     public boolean disableTenantDataSource(Integer tenantId) {
         if (tenantId == null || tenantId <= 0) {
             throw new BaseException("租户id必须大于0");
         }
-        DynamicDataSource router = dataSource;
         TenantData tenantData = tenantDataInfoDao.findByTenantId(tenantId).orElse(null);
-        if (tenantData != null && !Boolean.TRUE.equals(tenantData.getIsDel())) {
+        if (tenantData != null) {
+            tenantData.setStatus("DISABLED");
             tenantData.setIsDel(true);
-            tenantData.setUpdateTime(java.time.LocalDateTime.now());
+            tenantData.setUpdateTime(LocalDateTime.now());
             tenantDataInfoDao.saveAndFlush(tenantData);
         }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                router.removeDataSource(tenantId);
-                // 广播至其它实例，同步摘除路由
-                changePublisher.publish(DataSourceChangeEvent.remove(tenantId));
-            }
+        registerAfterCommit(() -> {
+            dataSource.removeDataSource(tenantId);
+            changePublisher.publish(DataSourceChangeEvent.remove(tenantId));
         });
         return true;
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public TenantData addTenantDataInfo(AddDataSourceReqVo reqVo) {
-        if (reqVo.getTenantId() == null || reqVo.getTenantId() <= 0) {
-            throw new BaseException("租户id必须大于0");
+    public DataSource activateTenantDataSource(Integer tenantId) {
+        DataSource pool = ensureTenantDataSource(tenantId);
+        if (pool == null) {
+            throw new BaseException("租户数据源不可用，请检查开通状态或重试开通");
         }
-        DynamicDataSource router = dataSource;
-        if (router.getResolvedDataSources().containsKey(reqVo.getTenantId())
-                || tenantDataInfoDao.existsByTenantIdAndIsDelFalse(reqVo.getTenantId())) {
-            throw new BaseException("租户数据源已存在");
-        }
-        Tenant tenant = tenantDao.findByIdAndIsDelFalse(reqVo.getTenantId()).orElse(null);
-        if (tenant == null) {
-            throw new BaseException("租户不存在");
-        }
-        TenantData tenantData = new TenantData();
-        tenantData.setTenantId(reqVo.getTenantId());
-        tenantData.setUrl(reqVo.getUrl());
-        tenantData.setUsername(reqVo.getUsername());
-        // 连接密码加密入库（未开启加密时原样存储），运行期由 Druid ConfigFilter 解密
-        tenantData.setPassword(passwordCipher.encrypt(reqVo.getPassword()));
-        tenantData.setCreateTime(java.time.LocalDateTime.now());
-        DruidDataSource pool = tenantDataSourceFactory.create(tenantData);
-        try {
-            try (java.sql.Connection connection = pool.getConnection()) {
-                connection.getMetaData();
-            }
-            TenantData saved = tenantDataInfoDao.saveAndFlush(tenantData);
-            // 添加租户数据源之后 立即加载使其生效
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    try {
-                        router.addDataSources(tenant.getId(), pool);
-                    } catch (RuntimeException e) {
-                        pool.close();
-                        throw e;
-                    }
-                    // 广播至其它实例，同步新增路由
-                    changePublisher.publish(DataSourceChangeEvent.add(tenant.getId()));
-                }
+        changePublisher.publish(DataSourceChangeEvent.add(tenantId));
+        return pool;
+    }
 
-                @Override
-                public void afterCompletion(int status) {
-                    if (status != STATUS_COMMITTED) {
-                        pool.close();
-                    }
-                }
-            });
-            return saved;
-        } catch (java.sql.SQLException e) {
+    @Override
+    public DataSource ensureTenantDataSource(Integer tenantId) {
+        if (tenantId == null || tenantId <= 0) {
+            return null;
+        }
+        DataSource existing = dataSource.getResolvedDataSources().get(tenantId);
+        if (existing != null) {
+            return existing;
+        }
+        Tenant tenant = tenantDao.findByIdAndIsDelFalse(tenantId).orElse(null);
+        TenantData tenantData = tenantDataInfoDao.findByTenantId(tenantId).orElse(null);
+        if (tenant == null || !"ACTIVE".equals(tenant.getStatus())
+                || (tenant.getExpiresAt() != null && tenant.getExpiresAt().isBefore(LocalDateTime.now()))
+                || tenantData == null || !"READY".equals(tenantData.getStatus())
+                || Boolean.TRUE.equals(tenantData.getIsDel())) {
+            return null;
+        }
+        DruidDataSource pool = tenantDataSourceFactory.create(tenantData);
+        try (Connection ignored = pool.getConnection()) {
+            if (dataSource.getResolvedDataSources().containsKey(tenantId)) {
+                return dataSource.getResolvedDataSources().get(tenantId);
+            }
+            dataSource.addDataSources(tenantId, pool);
+            return pool;
+        } catch (Exception e) {
             pool.close();
             throw new BaseException("租户数据库连接失败");
-        } catch (RuntimeException e) {
-            pool.close();
-            throw e;
         }
     }
 
     @Override
-    public javax.sql.DataSource ensureTenantDataSource(Integer tenantId) {
-        if (tenantId == null || tenantId <= 0) {
-            return null;
-        }
-        DynamicDataSource router = dataSource;
-        javax.sql.DataSource existing = router.getResolvedDataSources().get(tenantId);
-        if (existing != null) {
-            return existing;
-        }
-        // 查询系统库需系统上下文（调用方可能处于任意租户上下文或无上下文）
-        TenantData tenantData = LoginInfoHolder.callAsSystem(
-                () -> tenantDataInfoDao.findByTenantId(tenantId).orElse(null));
-        if (tenantData == null || Boolean.TRUE.equals(tenantData.getIsDel())) {
-            return null;
-        }
+    @Transactional(value = "systemTransactionManager", rollbackFor = Exception.class)
+    public boolean testTenantDataSource(Integer tenantId) {
+        TenantData tenantData = getTenantData(tenantId).orElseThrow(() -> new BaseException("租户数据源不存在"));
         DruidDataSource pool = tenantDataSourceFactory.create(tenantData);
-        try {
-            try (java.sql.Connection connection = pool.getConnection()) {
-                connection.getMetaData();
-            }
+        try (Connection ignored = pool.getConnection()) {
+            tenantData.setLastCheckAt(LocalDateTime.now());
+            tenantDataInfoDao.save(tenantData);
+            return true;
         } catch (Exception e) {
-            pool.close();
-            log.error("懒加载租户数据源连接失败，已隔离 tenantId={}: {}", tenantId, e.getMessage());
-            return null;
-        }
-        try {
-            router.addDataSources(tenantId, pool);
-        } catch (RuntimeException e) {
-            // 并发下可能已被其它线程注册，关闭多余连接池即可
+            throw new BaseException("租户数据库连接失败");
+        } finally {
             pool.close();
         }
-        return router.getResolvedDataSources().get(tenantId);
+    }
+
+    @Override
+    public Map<String, Integer> getPoolStatistics() {
+        int active = 0;
+        int idle = 0;
+        for (DataSource value : dataSource.getResolvedDataSources().values()) {
+            if (value instanceof DruidDataSource druid) {
+                active += druid.getActiveCount();
+                idle += druid.getPoolingCount();
+            }
+        }
+        Map<String, Integer> stats = new LinkedHashMap<>();
+        stats.put("tenantPools", dataSource.getResolvedDataSources().size());
+        stats.put("activeConnections", active);
+        stats.put("idleConnections", idle);
+        return stats;
+    }
+
+    private void registerAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 }

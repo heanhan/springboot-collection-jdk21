@@ -19,7 +19,7 @@ import java.util.Optional;
  * @author zhaojh
  */
 @Service
-@Transactional(rollbackFor = Exception.class)
+@Transactional(value = "tenantTransactionManager", rollbackFor = Exception.class)
 public class TestServiceImpl implements TestService {
 
     @Resource

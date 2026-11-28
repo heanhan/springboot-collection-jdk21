@@ -3,10 +3,8 @@ package com.example.dynamic.jpa.security;
 import com.example.common.result.ResultBody;
 import com.example.dynamic.jpa.common.util.JSONUtils;
 import com.example.dynamic.jpa.exception.ExceptionCode;
-import com.example.dynamic.jpa.exception.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
@@ -27,15 +25,8 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        if (authException instanceof JwtException) {
-            //todo 需要对返回的值的异常方法做处理
-            out.write(JSONUtils.toString(ResultBody.error(((JwtException) authException).getCode(), authException.getMessage())));
-        } else if (authException instanceof BadCredentialsException) {
-            out.write(JSONUtils.toString(ResultBody.error(ExceptionCode.UNAUTHORIZED.getCode(), authException.getMessage())));
-        } else {
-            out.write(JSONUtils.toString(ResultBody.error(ExceptionCode.UNAUTHORIZED.getCode(),
-                    ExceptionCode.UNAUTHORIZED.getMsg())));
-        }
+        out.write(JSONUtils.toString(ResultBody.error(ExceptionCode.TOKEN_ERROR.getCode(),
+                "认证失败或登录已过期，请重新登录")));
         out.flush();
         out.close();
     }

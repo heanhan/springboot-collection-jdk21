@@ -25,8 +25,7 @@ public class MyAccessDeniedHandler implements AccessDeniedHandler {
         resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
         resp.setContentType("application/json;charset=UTF-8");
         PrintWriter out = resp.getWriter();
-        out.write(JSONUtils.toString(ResultBody.error(ExceptionCode.UNAUTHORIZED.getCode(),
-                ExceptionCode.UNAUTHORIZED.getMsg())));
+        out.write(JSONUtils.toString(ResultBody.error(ExceptionCode.UNAUTHORIZED.getCode(), "权限不足")));
         out.flush();
         out.close();
     }

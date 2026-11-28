@@ -27,7 +27,6 @@ import java.lang.reflect.Method;
 @Slf4j
 @Aspect
 @Order(1)
-@Component
 public class DataSourceAspect {
     //com.cncy.newuembackend.system.controller
     @Pointcut("execution (* com.example.dynamic.jpa..controller.*.*(..))")

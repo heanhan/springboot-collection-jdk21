@@ -61,6 +61,8 @@ public interface TenantService {
      */
     Tenant getTenantByName(String tenantName);
 
+    Tenant getTenantByCode(String tenantCode);
+
     /**
      * 校验租户电话号码是否被绑定
      *

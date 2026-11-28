@@ -7,23 +7,18 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * <p>
- * 角色表 Mapper 接口
- * </p>
- *
- * @author zhaojh
- */
 @Repository
-public interface RoleDao extends BaseRepository<Role,Integer>, JpaSpecificationExecutor<Role> {
+public interface RoleDao extends BaseRepository<Role, Integer>, JpaSpecificationExecutor<Role> {
 
     Optional<Role> findByIdAndIsDelFalse(Integer id);
 
-    Optional<Role> findByRoleNameAndIsDelFalse(String roleName);
+    Optional<Role> findByRoleCodeAndTenantIdAndIsDelFalse(String roleCode, Integer tenantId);
+
+    List<Role> findAllByTenantIdAndIsDelFalseOrderByIdAsc(Integer tenantId);
 
     List<Role> findAllByIsDelFalseOrderByIdAsc();
 
-    boolean existsByRoleNameAndIsDelFalse(String roleName);
+    boolean existsByRoleCodeAndTenantIdAndIsDelFalse(String roleCode, Integer tenantId);
 
-    boolean existsByRoleNameAndIdNotAndIsDelFalse(String roleName, Integer id);
+    boolean existsByRoleNameAndTenantIdAndIdNotAndIsDelFalse(String roleName, Integer tenantId, Integer id);
 }

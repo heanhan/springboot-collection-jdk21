@@ -23,7 +23,9 @@ public class JwtUtil {
     @org.springframework.beans.factory.annotation.Autowired
     public JwtUtil(@Value("${security.jwt.secret}") String secret,
                    @Value("${app.token.access-ttl-minutes:30}") long accessTtlMinutes) {
-        Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("JWT 密钥长度不能少于32字节");
+        }
         this.secret = secret;
         this.accessTtlMillis = accessTtlMinutes * 60 * 1000L;
     }
@@ -39,8 +41,13 @@ public class JwtUtil {
      * 签发带指定 jti 的 access token，jti 用于登出黑名单
      */
     public String createAccessToken(String username, Object extendInfo, String jti) {
+        return createAccessToken(username, extendInfo, jti, 0);
+    }
+
+    public String createAccessToken(String username, Object extendInfo, String jti, int tokenVersion) {
         Map<String, Object> map = new HashMap<>();
         map.put(EXTEND_INFO, extendInfo);
+        map.put("tokenVersion", tokenVersion);
         return Jwts.builder()
                 .claims(map)
                 .id(jti)

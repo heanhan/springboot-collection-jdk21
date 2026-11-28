@@ -115,10 +115,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/login").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/refresh").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/logout").authenticated()
-                        // Actuator：健康检查/信息/指标/Prometheus 抓取端点放行（生产建议置于内网或经反向代理鉴权保护）
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/logout").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/me", "/api/permissions", "/api/menus").authenticated()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().access(rbacAuthorizationManager))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
